@@ -8,7 +8,7 @@ namespace API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // Ensures only authenticated users via SSO can hit this endpoint
+    [Authorize]
     public class AnalysisController : ControllerBase
     {
         private readonly IThreatAnalysisService _threatAnalysisService;

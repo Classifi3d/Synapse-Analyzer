@@ -1,9 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Application.Interfaces;
 
-namespace Application.Interfaces;
-
-internal interface IOllamaService
+public interface IOllamaService
 {
+    Task<OllamaAnalysisResult> AnalyzePcapDataAsync(string prompt, string pcapData);
+}
+
+public class OllamaAnalysisResult
+{
+    public bool IsThreat { get; set; }
+    public string Details { get; set; } = string.Empty;
 }
