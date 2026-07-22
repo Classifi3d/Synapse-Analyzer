@@ -35,8 +35,7 @@ public class ThreatAnalysisService : IThreatAnalysisService
         if (extension != ".pcap" && extension != ".pcapng")
             throw new ArgumentException("Invalid file type. Only .pcap and .pcapng are allowed.");
 
-        // 1. Upload to Storage (MinIO) via decoupled interface.
-        // Using OpenReadStream allows MinIO to process the file in memory chunks without saving to local disk first.
+
         string storagePath;
         using (var stream = file.OpenReadStream())
         {
@@ -47,22 +46,19 @@ public class ThreatAnalysisService : IThreatAnalysisService
                 file.Length);
         }
 
-        // 2. Create the Domain Entity linked to the User
         var analysisResult = new ThreatAnalysisResult
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             FileName = file.FileName,
-            FilePath = storagePath, // E.g., "pcaps/8f8a..._capture.pcap"
+            FilePath = storagePath,
             FileSizeBytes = file.Length,
             UploadedAt = DateTime.UtcNow,
             Status = "Pending"
         };
 
-        // 3. Persist to Database
         var savedEntity = await _analysisRepository.AddAsync(analysisResult);
 
-        // 4. Return DTO to the Controller
         return new PcapUploadResultDto
         {
             AnalysisId = savedEntity.Id,
@@ -75,7 +71,6 @@ public class ThreatAnalysisService : IThreatAnalysisService
 
     public async Task<ThreatAnalysisResultDto> ProcessAnalysisAsync(Guid userId, Guid analysisId, string prompt)
     {
-        // 1. Fetch the record and verify ownership
         var analysisRecord = await _analysisRepository.GetByIdAsync(analysisId);
         if (analysisRecord == null || analysisRecord.UserId != userId)
             throw new UnauthorizedAccessException("Analysis record not found or access denied.");
@@ -83,30 +78,23 @@ public class ThreatAnalysisService : IThreatAnalysisService
         if (analysisRecord.Status == "Processing" || analysisRecord.Status == "Completed")
             throw new InvalidOperationException("Analysis is already processing or completed.");
 
-        // Update status
         analysisRecord.Status = "Processing";
-        await _analysisRepository.UpdateAsync(analysisRecord); // Assuming an UpdateAsync exists
+        await _analysisRepository.UpdateAsync(analysisRecord);
 
-        // Create a temporary workspace for Zeek
         var tempWorkspace = Path.Combine(Path.GetTempPath(), "PacketGuard", Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempWorkspace);
         var localPcapPath = Path.Combine(tempWorkspace, "capture.pcap");
 
         try
         {
-            // 2. Download PCAP from MinIO to local temp folder for Zeek
             await _fileStorageService.DownloadFileAsync(analysisRecord.FilePath, localPcapPath);
 
-            // 3. Run Zeek against the local file
             var logDirectory = await _zeekProcessor.ProcessPcapAsync(localPcapPath, tempWorkspace);
 
-            // 4. Aggregate Zeek Logs for the LLM
             var aggregatedLogs = await AggregateZeekLogsAsync(logDirectory);
 
-            // 5. Send Prompt + Zeek Logs to Local LLM
             var llmResponse = await _llmProvider.AnalyzeAsync(prompt, aggregatedLogs);
 
-            // 6. Finalize record
             analysisRecord.Status = "Completed";
             analysisRecord.AnalysisDetails = llmResponse.Details;
             analysisRecord.IsThreatDetected = llmResponse.IsThreat;
@@ -128,30 +116,30 @@ public class ThreatAnalysisService : IThreatAnalysisService
         }
         finally
         {
-            // Cleanup local temporary files
             if (Directory.Exists(tempWorkspace))
+            {
                 Directory.Delete(tempWorkspace, true);
+            }
         }
     }
 
     private async Task<string> AggregateZeekLogsAsync(string logDirectory)
     {
-        // Simple aggregator: Read the first N lines of conn.log and dns.log to feed the LLM
-        // You can make this much smarter depending on context windows.
         var sb = new StringBuilder();
 
         var connLogPath = Path.Combine(logDirectory, "conn.log");
         if (File.Exists(connLogPath))
         {
-            sb.AppendLine("=== CONN.LOG ===");
+            sb.AppendLine("CONN.LOG");
             var connLines = await File.ReadAllLinesAsync(connLogPath);
-            sb.AppendLine(string.Join("\n", connLines.Take(100))); // Take top 100 lines to save context
+            sb.AppendLine(string.Join("\n", connLines.Take(100))); 
         }
 
         var dnsLogPath = Path.Combine(logDirectory, "dns.log");
         if (File.Exists(dnsLogPath))
         {
-            sb.AppendLine("\n=== DNS.LOG ===");
+            sb.AppendLine("\n");
+            sb.AppendLine("DNS.LOG");
             var dnsLines = await File.ReadAllLinesAsync(dnsLogPath);
             sb.AppendLine(string.Join("\n", dnsLines.Take(100)));
         }

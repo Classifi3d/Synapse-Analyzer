@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
-using System.Security.Claims;
+﻿using Application.DTOs;
 using Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace API.Controllers
 {
@@ -42,6 +43,36 @@ namespace API.Controllers
             {
                 return BadRequest(new { Error = ex.Message });
             }
+        }
+
+        [HttpPost("{analysisId:guid}/process")]
+        public async Task<IActionResult> ProcessAnalysis(Guid analysisId, [FromBody] AnalyzePromptRequestDto request)
+        {
+            try
+            {
+                var userId = GetUserIdFromToken();
+                var result = await _threatAnalysisService.ProcessAnalysisAsync(userId, analysisId, request.Prompt);
+
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+        }
+
+        private Guid GetUserIdFromToken()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out Guid userId))
+            {
+                throw new UnauthorizedAccessException("Invalid or missing user identity in token.");
+            }
+            return userId;
         }
     }
 }
