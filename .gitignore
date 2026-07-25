@@ -116,3 +116,8 @@ UpgradeLog*.htm
 **/App_Data/*.mdf
 **/App_Data/*.ldf
 **/App_Data/*.sdf
+# Python (Zeek analysis service)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/

@@ -1,0 +1,93 @@
+name: synapse
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: synapse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      # The browser PUTs capture chunks directly to MinIO, so its origin must be allowed
+      # here. MinIO does not implement the S3 PutBucketCors API - this variable is the only
+      # way to configure it.
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:5173,http://localhost:3000"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zeek:
+    build:
+      context: ./SyanpseApplication_ZeekService
+    environment:
+      ZEEK_WORKSPACE_ROOT: /tmp/synapse
+      ZEEK_MAX_ROWS_PER_LOG: "200"
+    ports:
+      - "8000:8000"
+    # Captures are written to the container's filesystem while Zeek runs; tmpfs keeps them
+    # off disk and guarantees they disappear with the container.
+    tmpfs:
+      - /tmp/synapse:size=16g
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    # Pull the model once the container is up:
+    #   docker compose exec ollama ollama pull llama3.1
+
+  # Started only with: docker compose --profile api up
+  # Leave it out to run the API from your IDE against the services above.
+  api:
+    profiles: ["api"]
+    build:
+      context: ./SyanpseApplication_API
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=synapse;Username=synapse;Password=synapse"
+      MinIO__Endpoint: "http://minio:9000"
+      # Signed for the host the browser can reach, not the compose-internal name.
+      MinIO__PublicEndpoint: "http://localhost:9000"
+      Zeek__BaseAddress: "http://zeek:8000"
+      Ollama__BaseAddress: "http://ollama:11434"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      zeek:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  minio-data:
+  ollama-models:

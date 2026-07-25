@@ -1,26 +1,50 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence.Repositories;
 
-public class AnalysisRepository : IAnalysisRepository
+public class AnalysisRepository(AppDbContext context) : IAnalysisRepository
 {
-    private readonly AppDbContext _context;
-
-    public AnalysisRepository(AppDbContext context)
+    public async Task<Analysis> AddAsync(
+        Analysis analysis,
+        CancellationToken cancellationToken = default)
     {
-        _context = context;
+        await context.Analyses.AddAsync(analysis, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return analysis;
     }
 
-    public async Task<ThreatAnalysisResult> AddAsync(ThreatAnalysisResult result)
+    /// <summary>
+    /// Ownership is part of the query rather than a check afterwards, so one user can never
+    /// load another user's analysis.
+    /// </summary>
+    public Task<Analysis?> GetForUserAsync(
+        Guid id,
+        Guid userId,
+        CancellationToken cancellationToken = default)
     {
-        await _context.ThreatAnalysisResults.AddAsync(result);
-        await _context.SaveChangesAsync(); 
-        return result;
+        return context.Analyses
+            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, cancellationToken);
     }
 
-    public async Task<ThreatAnalysisResult?> GetByIdAsync(Guid id)
+    public async Task<IReadOnlyList<Analysis>> ListForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
     {
-        return await _context.ThreatAnalysisResults.FindAsync(id);
+        return await context.Analyses
+            .AsNoTracking()
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task UpdateAsync(
+        Analysis analysis,
+        CancellationToken cancellationToken = default)
+    {
+        context.Analyses.Update(analysis);
+        await context.SaveChangesAsync(cancellationToken);
     }
 }

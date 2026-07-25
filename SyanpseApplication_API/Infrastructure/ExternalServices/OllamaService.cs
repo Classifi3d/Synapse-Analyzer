@@ -1,66 +1,77 @@
-﻿using Application.DTOs;
-using Application.Interfaces;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Exceptions;
+using Application.Interfaces;
+using Infrastructure.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.ExternalServices;
 
+/// <summary>
+/// Streaming client for Ollama's /api/generate endpoint. Receives a finished prompt - it has
+/// no knowledge of Zeek, captures, or how the prompt was assembled.
+/// </summary>
 public class OllamaService : IOllamaService
 {
     private readonly HttpClient _httpClient;
+    private readonly OllamaOptions _options;
     private readonly ILogger<OllamaService> _logger;
-    private readonly string _modelName;
 
     public OllamaService(
-        IConfiguration configuration,
         HttpClient httpClient,
+        IOptions<OllamaOptions> options,
         ILogger<OllamaService> logger)
     {
         _httpClient = httpClient;
+        _options = options.Value;
         _logger = logger;
-
-        var baseAddress = configuration["Ollama:ConnectionString"]
-            ?? throw new InvalidOperationException("Missing Ollama:ConnectionString.");
-
-        _modelName = configuration["Ollama:Model"]
-            ?? throw new InvalidOperationException("Missing Ollama:Model.");
-
-        _httpClient.BaseAddress ??= new Uri(baseAddress);
     }
 
-    public async IAsyncEnumerable<string> AnalyzeAsync(
+    public async IAsyncEnumerable<string> StreamAsync(
         string prompt,
-        ZeekAnalysisResultDto zeekResult,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = new OllamaGenerateRequest
         {
-            Model = _modelName,
+            Model = _options.Model,
+            Prompt = prompt,
             Stream = true,
-            Prompt = BuildPrompt(prompt, zeekResult)
+            Options = new OllamaModelOptions
+            {
+                NumCtx = _options.ContextLength,
+                Temperature = _options.Temperature
+            }
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(
-            "api/generate",
-            request,
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/generate")
+        {
+            Content = JsonContent.Create(request)
+        };
+
+        // Return as soon as headers arrive so tokens can be forwarded while the model is
+        // still generating, rather than buffering the whole response.
+        using var response = await _httpClient.SendAsync(
+            httpRequest,
+            HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        await using var stream =
-            await response.Content.ReadAsStreamAsync(cancellationToken);
+            throw new AnalysisPipelineException(
+                $"Ollama returned {(int)response.StatusCode}: {body}");
+        }
 
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
 
-        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        // Ollama emits newline-delimited JSON, one object per token.
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
-            var line = await reader.ReadLineAsync(cancellationToken);
-
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
@@ -70,77 +81,24 @@ public class OllamaService : IOllamaService
             {
                 chunk = JsonSerializer.Deserialize<OllamaStreamChunk>(line);
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Failed to deserialize Ollama streaming response.");
+                _logger.LogWarning(ex, "Skipping malformed Ollama chunk: {Line}", line);
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(chunk?.Response))
-            {
-                yield return chunk.Response;
-            }
+            if (chunk is null)
+                continue;
 
-            if (chunk?.Done == true)
+            if (!string.IsNullOrEmpty(chunk.Error))
+                throw new AnalysisPipelineException($"Ollama reported an error: {chunk.Error}");
+
+            if (!string.IsNullOrEmpty(chunk.Response))
+                yield return chunk.Response;
+
+            if (chunk.Done)
                 yield break;
         }
-    }
-
-    private static string BuildPrompt(
-        string userPrompt,
-        ZeekAnalysisResultDto zeekResult)
-    {
-        var zeekJson = JsonSerializer.Serialize(
-            zeekResult,
-            new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-
-        var builder = new StringBuilder();
-
-        builder.AppendLine("""
-You are an expert cybersecurity analyst.
-
-Analyze the supplied Zeek analysis.
-
-Look for:
-
-- Malware
-- Command & Control traffic
-- Beaconing
-- DNS tunneling
-- Data exfiltration
-- Lateral movement
-- Port scans
-- Malicious HTTP activity
-- Suspicious TLS behaviour
-- Indicators of compromise
-
-Base every conclusion ONLY on the supplied Zeek data.
-
-Produce a professional report using the following sections:
-
-# Executive Summary
-
-# Findings
-
-# Indicators of Compromise
-
-# Risk Assessment
-
-# Recommendations
-""");
-
-        builder.AppendLine();
-        builder.AppendLine("User Instructions:");
-        builder.AppendLine(userPrompt);
-
-        builder.AppendLine();
-        builder.AppendLine("Zeek Analysis:");
-        builder.AppendLine(zeekJson);
-
-        return builder.ToString();
     }
 
     private sealed class OllamaGenerateRequest
@@ -153,6 +111,18 @@ Produce a professional report using the following sections:
 
         [JsonPropertyName("stream")]
         public bool Stream { get; set; }
+
+        [JsonPropertyName("options")]
+        public OllamaModelOptions? Options { get; set; }
+    }
+
+    private sealed class OllamaModelOptions
+    {
+        [JsonPropertyName("num_ctx")]
+        public int NumCtx { get; set; }
+
+        [JsonPropertyName("temperature")]
+        public double Temperature { get; set; }
     }
 
     private sealed class OllamaStreamChunk
@@ -162,5 +132,8 @@ Produce a professional report using the following sections:
 
         [JsonPropertyName("done")]
         public bool Done { get; set; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Application.DTOs;
+using Application.DTOs;
 
 namespace Application.Interfaces;
 
@@ -6,18 +6,30 @@ public interface IThreatAnalysisService
 {
     Task<InitiateUploadResponseDto> InitiateUploadAsync(
         Guid userId,
-        InitiateUploadRequestDto request);
+        InitiateUploadRequestDto request,
+        CancellationToken cancellationToken = default);
 
-    Task CompleteUploadAsync(
+    Task<AnalysisDto> CompleteUploadAsync(
         Guid userId,
-        CompleteUploadRequestDto request);
+        CompleteUploadRequestDto request,
+        CancellationToken cancellationToken = default);
 
-    Task<ThreatAnalysisResultDto> ProcessAnalysisAsync(
+    Task<AnalysisDto> GetAnalysisAsync(
         Guid userId,
         Guid analysisId,
-        string prompt);
+        CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<string> StreamAnalysisAsync(
+    Task<IReadOnlyList<AnalysisDto>> ListAnalysesAsync(
         Guid userId,
-        Guid analysisId);
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs the full pipeline - Zeek analysis, prompt construction, LLM generation - emitting
+    /// events as they occur. The report is persisted once generation finishes.
+    /// </summary>
+    IAsyncEnumerable<AnalysisStreamEvent> StreamAnalysisAsync(
+        Guid userId,
+        Guid analysisId,
+        string? prompt,
+        CancellationToken cancellationToken = default);
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,10 +7,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      MinIO is reached through the AWS S3 client rather than the Minio package: presigning
+      individual multipart parts requires CreateMultipartUpload plus a signed url carrying
+      uploadId and partNumber, which the Minio .NET SDK does not expose publicly.
+    -->
+    <PackageReference Include="AWSSDK.Core" Version="4.0.100.8" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-    <PackageReference Include="Minio" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

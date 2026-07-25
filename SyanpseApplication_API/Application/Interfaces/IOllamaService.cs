@@ -1,11 +1,12 @@
-﻿using Application.DTOs;
-
 namespace Application.Interfaces;
 
 public interface IOllamaService
 {
-    IAsyncEnumerable<string> AnalyzeAsync(
+    /// <summary>
+    /// Streams the model's response token by token. The prompt is fully constructed by the
+    /// application layer - this service knows nothing about Zeek or packet captures.
+    /// </summary>
+    IAsyncEnumerable<string> StreamAsync(
         string prompt,
-        ZeekAnalysisResultDto zeekResult,
         CancellationToken cancellationToken = default);
 }

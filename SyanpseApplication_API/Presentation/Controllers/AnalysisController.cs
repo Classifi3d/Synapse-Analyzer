@@ -1,84 +1,121 @@
-﻿using Application.DTOs;
+using Application.DTOs;
+using Application.Exceptions;
 using Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using Presentation.Infrastructure;
 
 namespace Presentation.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/[controller]")]
-public class AnalysisController : ControllerBase
+public class AnalysisController(
+    IThreatAnalysisService analysisService,
+    ILogger<AnalysisController> logger) : ControllerBase
 {
-    private readonly IThreatAnalysisService _analysisService;
-
-    public AnalysisController(IThreatAnalysisService analysisService)
-    {
-        _analysisService = analysisService;
-    }
-
+    /// <summary>
+    /// Opens an upload session. Returns one presigned url per part; the client uploads the
+    /// chunks straight to MinIO, so no capture data passes through this API.
+    /// </summary>
     [HttpPost("upload/initiate")]
+    [ProducesResponseType<InitiateUploadResponseDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<InitiateUploadResponseDto>> InitiateUpload(
-        [FromBody] InitiateUploadRequestDto request)
+        [FromBody] InitiateUploadRequestDto request,
+        CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-
-        var result = await _analysisService.InitiateUploadAsync(
-            userId,
-            request);
+        var result = await analysisService.InitiateUploadAsync(
+            User.GetUserId(),
+            request,
+            cancellationToken);
 
         return Ok(result);
     }
 
+    /// <summary>
+    /// Assembles the uploaded parts. The client must echo back the ETag MinIO returned for
+    /// each part.
+    /// </summary>
     [HttpPost("upload/complete")]
-    public async Task<IActionResult> CompleteUpload(
-        [FromBody] CompleteUploadRequestDto request)
+    [ProducesResponseType<AnalysisDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AnalysisDto>> CompleteUpload(
+        [FromBody] CompleteUploadRequestDto request,
+        CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
+        var result = await analysisService.CompleteUploadAsync(
+            User.GetUserId(),
+            request,
+            cancellationToken);
 
-        await _analysisService.CompleteUploadAsync(userId, request);
-
-        return NoContent();
+        return Ok(result);
     }
 
-    //[HttpPost("{analysisId:guid}/process")]
-    //public async Task<IActionResult> ProcessAnalysis(
-    //    Guid analysisId,
-    //    [FromBody] AnalyzePromptRequestDto request)
-    //{
-    //    var userId = GetUserId();
+    [HttpGet]
+    [ProducesResponseType<IReadOnlyList<AnalysisDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AnalysisDto>>> List(
+        CancellationToken cancellationToken)
+    {
+        return Ok(await analysisService.ListAnalysesAsync(User.GetUserId(), cancellationToken));
+    }
 
-    //    var result = await _analysisService.ProcessAnalysisAsync(
-    //        userId,
-    //        analysisId,
-    //        request.Prompt);
+    [HttpGet("{analysisId:guid}")]
+    [ProducesResponseType<AnalysisDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AnalysisDto>> Get(
+        Guid analysisId,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await analysisService.GetAnalysisAsync(
+            User.GetUserId(),
+            analysisId,
+            cancellationToken));
+    }
 
-    //    return Ok(result);
-    //}
-
+    /// <summary>
+    /// Runs the pipeline and streams the report as server-sent events. Communication is
+    /// one-way once analysis begins, which is why this is SSE rather than a websocket.
+    /// </summary>
+    /// <remarks>
+    /// Emits four event types: <c>status</c> (stage changes), <c>summary</c> (Zeek counters),
+    /// <c>token</c> (generated text), and <c>done</c> or <c>error</c> as the final frame.
+    /// </remarks>
     [HttpGet("{analysisId:guid}/stream")]
-    public async Task StreamAnalysis(Guid analysisId)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task Stream(
+        Guid analysisId,
+        [FromQuery] string? prompt,
+        CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
+        var writer = new ServerSentEventWriter(Response);
 
-        Response.Headers.Append("Content-Type", "text/event-stream");
-        Response.Headers.Append("Cache-Control", "no-cache");
-
-        await foreach (var chunk in _analysisService.StreamAnalysisAsync(userId, analysisId))
+        try
         {
-            await Response.WriteAsync($"data: {chunk}\n\n");
-            await Response.Body.FlushAsync();
+            await foreach (var @event in analysisService
+                               .StreamAnalysisAsync(userId, analysisId, prompt, cancellationToken)
+                               .WithCancellation(cancellationToken))
+            {
+                await writer.WriteAsync(@event, cancellationToken);
+            }
         }
-    }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The client navigated away or closed the tab; nothing to report.
+            logger.LogInformation("Client disconnected from analysis stream {AnalysisId}.", analysisId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Analysis stream {AnalysisId} failed.", analysisId);
 
-    private Guid GetUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var message = ex switch
+            {
+                AnalysisNotFoundException or InvalidAnalysisStateException => ex.Message,
+                _ => "The analysis failed unexpectedly."
+            };
 
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException();
-
-        return userId;
+            await writer.WriteErrorAsync(message, CancellationToken.None);
+        }
     }
 }
