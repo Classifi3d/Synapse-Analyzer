@@ -1,39 +1,42 @@
-﻿using Domain.Interfaces;
-using System.Diagnostics;
+﻿using System.Net.Http.Json;
+using Application.DTOs;
+using Application.Interfaces;
 
-namespace Infrastructure.ExternalServices
+namespace Infrastructure.ExternalServices;
+
+public class ZeekProcessor : IZeekProcessor
 {
-    public class ZeekProcessor : IZeekProcessor
+    private readonly HttpClient _httpClient;
+
+    public ZeekProcessor(HttpClient httpClient)
     {
-        public async Task<string> ProcessPcapAsync(string localPcapFilePath, string outputDirectory)
+        _httpClient = httpClient;
+    }
+
+    public async Task<ZeekAnalysisResultDto> AnalyzeAsync(
+        Guid analysisId,
+        string bucketName,
+        string objectKey,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new ZeekAnalyzeRequestDto
         {
+            AnalysisId = analysisId,
+            BucketName = bucketName,
+            ObjectKey = objectKey
+        };
 
-            var processInfo = new ProcessStartInfo
-            {
-                FileName = "zeek",
-                Arguments = $"-r \"{localPcapFilePath}\"",
-                WorkingDirectory = outputDirectory, // Zeek drops logs in the current working directory
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+        using var response = await _httpClient.PostAsJsonAsync(
+            "/analyze",
+            request,
+            cancellationToken);
 
-            using var process = new Process { StartInfo = processInfo };
+        response.EnsureSuccessStatusCode();
 
-            process.Start();
+        var result = await response.Content.ReadFromJsonAsync<ZeekAnalysisResultDto>(
+            cancellationToken: cancellationToken);
 
-            // Asynchronously wait for Zeek to finish reading the PCAP
-            await process.WaitForExitAsync();
-
-            if (process.ExitCode != 0)
-            {
-                var error = await process.StandardError.ReadToEndAsync();
-                throw new InvalidOperationException($"Zeek processing failed with code {process.ExitCode}: {error}");
-            }
-
-            // The output directory now contains conn.log, dns.log, http.log, etc.
-            return outputDirectory;
-        }
+        return result ?? throw new InvalidOperationException(
+            "The Zeek service returned an empty response.");
     }
 }

@@ -1,10 +1,23 @@
 ﻿using Application.DTOs;
-using Microsoft.AspNetCore.Http;
 
 namespace Application.Interfaces;
 
 public interface IThreatAnalysisService
 {
-    Task<PcapUploadResultDto> UploadPcapAsync(Guid userId, IFormFile file);
-    Task<ThreatAnalysisResultDto> ProcessAnalysisAsync(Guid userId, Guid analysisId, string prompt);
+    Task<InitiateUploadResponseDto> InitiateUploadAsync(
+        Guid userId,
+        InitiateUploadRequestDto request);
+
+    Task CompleteUploadAsync(
+        Guid userId,
+        CompleteUploadRequestDto request);
+
+    Task<ThreatAnalysisResultDto> ProcessAnalysisAsync(
+        Guid userId,
+        Guid analysisId,
+        string prompt);
+
+    IAsyncEnumerable<string> StreamAnalysisAsync(
+        Guid userId,
+        Guid analysisId);
 }
