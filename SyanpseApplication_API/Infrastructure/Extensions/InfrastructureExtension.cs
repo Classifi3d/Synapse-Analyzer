@@ -26,7 +26,26 @@ public static class InfrastructureExtension
             .AddObjectStorage(configuration)
             .AddZeek(configuration)
             .AddOllama(configuration)
-            .AddApplicationServices(configuration);
+            .AddApplicationServices(configuration)
+            .AddDiagnostics();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Services backing the diagnostics controller. The controller itself is only routable in
+    /// development; these are registered unconditionally so the DI graph is identical in every
+    /// environment.
+    /// </summary>
+    private static IServiceCollection AddDiagnostics(this IServiceCollection services)
+    {
+        // Deliberately short: a probe should report "unreachable" quickly rather than inherit
+        // the multi-minute timeouts the real Zeek and Ollama calls need.
+        services.AddHttpClient(ServiceHealthProbe.ProbeClientName)
+            .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(5));
+
+        services.AddScoped<IStorageDiagnostics, S3StorageDiagnostics>();
+        services.AddScoped<IServiceHealthProbe, ServiceHealthProbe>();
 
         return services;
     }
@@ -82,6 +101,18 @@ public static class InfrastructureExtension
                 : options.PublicEndpoint;
 
             return CreateClient(options, endpoint);
+        });
+
+        // Fail-fast client for health probes only.
+        services.AddKeyedSingleton<IAmazonS3>(S3ClientKeys.Probe, (sp, _) =>
+        {
+            var options = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
+
+            return CreateClient(options, options.Endpoint, config =>
+            {
+                config.MaxErrorRetry = 0;
+                config.Timeout = TimeSpan.FromSeconds(5);
+            });
         });
 
         services.AddScoped<IFileStorageService, S3FileStorageService>();
@@ -143,7 +174,10 @@ public static class InfrastructureExtension
         return services;
     }
 
-    private static AmazonS3Client CreateClient(MinioOptions options, string endpoint)
+    private static AmazonS3Client CreateClient(
+        MinioOptions options,
+        string endpoint,
+        Action<AmazonS3Config>? configure = null)
     {
         var config = new AmazonS3Config
         {
@@ -155,6 +189,8 @@ public static class InfrastructureExtension
 
             AuthenticationRegion = options.Region
         };
+
+        configure?.Invoke(config);
 
         return new AmazonS3Client(
             new BasicAWSCredentials(options.AccessKey, options.SecretKey),

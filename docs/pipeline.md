@@ -212,6 +212,68 @@ On a single host both are `http://localhost:9000`. Under compose they differ
 (`http://minio:9000` vs `http://localhost:9000`), which is why rewriting the host after signing
 is not an option.
 
+## Diagnostics endpoints
+
+`/api/diagnostics/*` — unauthenticated, and **routable only in Development**; every action
+returns 404 in any other environment. Use it to check each component in isolation before
+running the real pipeline.
+
+### Storage round trip
+
+```bash
+# Upload straight into the bucket
+curl -F "file=@capture.pcapng" http://localhost:8080/api/diagnostics/storage/objects
+
+# List what is there (optionally filtered)
+curl "http://localhost:8080/api/diagnostics/storage/objects?prefix=diagnostics/"
+
+# Fetch it back — byte-for-byte what went in
+curl -o roundtrip.pcapng \
+  "http://localhost:8080/api/diagnostics/storage/objects/diagnostics/<guid>/capture.pcapng"
+
+# Clean up
+curl -X DELETE "http://localhost:8080/api/diagnostics/storage/objects/diagnostics/<guid>/capture.pcapng"
+```
+
+Test objects go under `diagnostics/`, keeping them clear of `captures/`.
+
+These endpoints stream file bytes **through** the API, which the production upload path
+deliberately never does — they exist to prove the bucket works, not as an alternate upload
+route. That is the reason they live on a separate `IStorageDiagnostics` interface rather than
+on `IFileStorageService`, and the reason the controller is environment-gated.
+
+### Zeek on demand
+
+```bash
+curl -X POST http://localhost:8080/api/diagnostics/zeek/analyze \
+  -H "Content-Type: application/json" \
+  -d '{ "objectKey": "diagnostics/<guid>/capture.pcapng" }'
+```
+
+Returns everything the Zeek service produced — full summary, every sampled log row, timings,
+and which logs were truncated. This is the uncapped view; the report pipeline trims the same
+data down before prompting. `bucketName` is optional and defaults to the capture bucket.
+
+The capture is fetched by the Zeek service through a presigned url, exactly as in the real
+pipeline — the API does not relay it.
+
+### Health
+
+| Endpoint | Checks |
+|---|---|
+| `GET /api/diagnostics/health` | All four in parallel; 200 when every one is healthy, 503 otherwise |
+| `GET /api/diagnostics/health/minio` | Reachable, and the capture bucket exists |
+| `GET /api/diagnostics/health/zeek` | Reachable, and the Zeek binary is present (`degraded` = binary missing) |
+| `GET /api/diagnostics/health/ollama` | Reachable, **and the configured model is actually pulled** |
+| `GET /api/diagnostics/health/postgres` | Connects, and no migrations are pending |
+
+Each returns `{ component, healthy, status, latencyMs, details, error }`. Individual probes
+always return 200 — read `healthy`, not the status code. Probes use a 5-second timeout and no
+S3 retries, so a fully-down stack reports in about four seconds rather than hanging.
+
+`GET /health` (no auth, every environment) stays a plain liveness check for container
+orchestration.
+
 ## Configuration
 
 | Key | Purpose |

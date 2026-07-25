@@ -33,9 +33,20 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 
-    // Keeps a local stack usable without a separate migration step.
+    // Keeps a local stack usable without a separate migration step. A failure here is logged
+    // rather than fatal, so the app still starts when Postgres is down and
+    // /api/diagnostics/health can report which dependencies are missing.
     using var scope = app.Services.CreateScope();
-    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+
+    try
+    {
+        await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "Database migration failed at startup; the API is running without a usable database.");
+    }
 }
 
 app.UseExceptionHandler();
