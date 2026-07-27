@@ -1,0 +1,424 @@
+/*
+ * Theme layer on top of Bootstrap.
+ *
+ * The app runs in Bootstrap's own dark mode (`data-bs-theme="dark"` in index.html),
+ * so components come out dark by default. The previous build set `bg-dark` on the
+ * shell but left the transcript cards on `bg-light`, and both stylesheets were
+ * empty. Everything below is surface colour and spacing - no restyling of what
+ * Bootstrap already handles.
+ */
+
+:root,
+[data-bs-theme='dark'] {
+  --app-bg: #0d1117;
+  --app-surface: #161b22;
+  --app-surface-raised: #1c2333;
+  --app-border: #2b3240;
+  --app-accent: #4c8dff;
+
+  --bs-body-bg: var(--app-bg);
+  --bs-border-color: var(--app-border);
+  --bs-primary: var(--app-accent);
+  --bs-link-color-rgb: 108, 158, 255;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--app-bg);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  overflow: hidden;
+}
+
+/* Bootstrap's utilities have no min-height:0, without which a flex child refuses to
+   shrink and the transcript scrolls the page instead of itself. */
+.min-h-0 {
+  min-height: 0;
+}
+
+.x-small {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.tracking-wide {
+  letter-spacing: 0.04em;
+}
+
+/* ---- Chrome --------------------------------------------------------------- */
+
+.app-navbar {
+  background-color: var(--app-surface);
+  border-color: var(--app-border) !important;
+}
+
+.avatar-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--app-accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.centered-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 25rem;
+}
+
+/* ---- Transcript ----------------------------------------------------------- */
+
+.transcript-scroll {
+  scrollbar-gutter: stable;
+}
+
+.transcript-column {
+  width: 100%;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.composer-bar .transcript-column {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.analysis-turn + .analysis-turn {
+  margin-top: 2.5rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid var(--app-border);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+
+.surface-card {
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+}
+
+.surface-card .card-header {
+  background-color: var(--app-surface-raised);
+  border-bottom-color: var(--app-border);
+}
+
+.request-card {
+  background-color: var(--app-surface-raised);
+  border: 1px solid var(--app-border);
+  max-width: 85%;
+}
+
+.request-prompt {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.925rem;
+}
+
+.file-chip {
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+/* ---- Stage indicator ------------------------------------------------------ */
+
+.stage-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  background-color: var(--app-surface);
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+}
+
+/* ---- Capture summary ------------------------------------------------------ */
+
+.stat-tile {
+  background-color: var(--app-surface-raised);
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  height: 100%;
+}
+
+.stat-value {
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bs-secondary-color);
+}
+
+.sub-table-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.4rem;
+}
+
+.sub-table {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub-table th {
+  color: var(--bs-secondary-color);
+  font-weight: 500;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.sub-table td {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-chip {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--bs-warning-border-subtle);
+  background-color: var(--bs-warning-bg-subtle);
+  color: var(--bs-warning-text-emphasis);
+}
+
+/* ---- Report --------------------------------------------------------------- */
+
+.report-body {
+  font-size: 0.925rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.report-body > :last-child {
+  margin-bottom: 0;
+}
+
+.report-body h1,
+.report-body h2,
+.report-body h3,
+.report-body h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.report-body > h1:first-child,
+.report-body > h2:first-child,
+.report-body > h3:first-child {
+  margin-top: 0;
+}
+
+.report-body code {
+  background-color: var(--app-surface-raised);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  color: var(--bs-body-color);
+}
+
+.report-body pre {
+  background-color: var(--app-bg);
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.report-body pre code {
+  background: none;
+  padding: 0;
+}
+
+.report-body blockquote {
+  border-left: 3px solid var(--app-border);
+  padding-left: 0.85rem;
+  color: var(--bs-secondary-color);
+  margin-bottom: 1rem;
+}
+
+.report-body ul,
+.report-body ol {
+  padding-left: 1.35rem;
+}
+
+.streaming-caret {
+  display: inline-block;
+  width: 0.5rem;
+  height: 1rem;
+  margin-left: 0.15rem;
+  vertical-align: text-bottom;
+  background-color: var(--app-accent);
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: fit-content;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* ---- Composer ------------------------------------------------------------- */
+
+.composer-bar {
+  background-color: var(--app-surface);
+  border-top: 1px solid var(--app-border);
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1.1rem 1rem;
+  border: 2px dashed var(--app-border);
+  border-radius: 0.5rem;
+  background-color: var(--app-bg);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.dropzone:hover:not(.is-disabled) {
+  border-color: var(--app-accent);
+}
+
+.dropzone.is-active-drop {
+  border-color: var(--app-accent);
+  background-color: rgb(76 141 255 / 12%);
+  color: var(--app-accent);
+}
+
+.dropzone.is-invalid-drop {
+  border-color: var(--bs-danger);
+  background-color: rgb(220 53 69 / 12%);
+  color: var(--bs-danger);
+}
+
+.dropzone.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dropzone-browse {
+  color: var(--app-accent);
+  text-decoration: underline;
+}
+
+.attached-file {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  background-color: var(--app-surface-raised);
+  font-size: 0.875rem;
+  min-width: 0;
+}
+
+.upload-progress {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  background-color: var(--app-surface-raised);
+}
+
+.composer-input {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.composer-input .form-control {
+  background-color: var(--app-bg);
+  border-color: var(--app-border);
+  resize: none;
+}
+
+.composer-input .form-control:focus {
+  background-color: var(--app-bg);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 0.2rem rgb(76 141 255 / 20%);
+}
+
+.composer-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding-inline: 1.1rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.composer-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  color: var(--bs-secondary-color);
+  text-align: center;
+}
+
+/* ---- Motion --------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-caret {
+    animation: none;
+  }
+
+  .dropzone {
+    transition: none;
+  }
+}
