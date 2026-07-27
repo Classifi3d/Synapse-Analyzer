@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import shutil
 from pathlib import Path
 
 from .config import settings
@@ -11,6 +13,33 @@ class ZeekExecutionError(Exception):
     """Raised when Zeek exits non-zero or does not finish in time."""
 
 
+def resolve_zeek_binary() -> str | None:
+    """
+    Locate the Zeek binary, or return None if it is unusable.
+
+    The configured path wins, but different images install Zeek in different places -
+    the official zeek/zeek image uses /usr/local/zeek while zeek.org's .deb packages use
+    /opt/zeek - so PATH is consulted as a fallback rather than reporting the service
+    broken over a layout difference.
+    """
+
+    candidate = Path(settings.zeek_binary)
+
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
+
+    found = shutil.which("zeek")
+
+    if found:
+        logger.warning(
+            "Zeek was not at the configured path %s; using %s from PATH instead.",
+            settings.zeek_binary,
+            found,
+        )
+
+    return found
+
+
 async def run_zeek(capture_path: Path, workspace: Path) -> None:
     """
     Runs Zeek against the capture, writing logs into ``workspace``.
@@ -20,8 +49,15 @@ async def run_zeek(capture_path: Path, workspace: Path) -> None:
     ``-C`` ignores bad checksums, which are common in captures taken on hosts doing offload.
     """
 
+    binary = resolve_zeek_binary()
+
+    if binary is None:
+        raise ZeekExecutionError(
+            f"The Zeek binary was not found at '{settings.zeek_binary}' or on PATH."
+        )
+
     command = [
-        settings.zeek_binary,
+        binary,
         "-C",
         "-r",
         str(capture_path),

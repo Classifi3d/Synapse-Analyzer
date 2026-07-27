@@ -10,7 +10,7 @@ from .config import settings
 from .models import AnalyzeRequest, AnalyzeResponse
 from .parser import parse_logs
 from .storage import CaptureDownloadError, CaptureTooLargeError, download_capture
-from .zeek_runner import ZeekExecutionError, run_zeek
+from .zeek_runner import ZeekExecutionError, resolve_zeek_binary, run_zeek
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,11 +31,11 @@ app = FastAPI(
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    zeek_present = Path(settings.zeek_binary).exists()
+    binary = resolve_zeek_binary()
 
     return {
-        "status": "healthy" if zeek_present else "degraded",
-        "zeek": "available" if zeek_present else f"missing at {settings.zeek_binary}",
+        "status": "healthy" if binary else "degraded",
+        "zeek": binary or f"missing at {settings.zeek_binary} and not on PATH",
     }
 
 

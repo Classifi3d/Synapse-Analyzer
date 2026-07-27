@@ -1,9 +1,12 @@
-# The official Zeek image already carries Zeek and its policy scripts under /opt/zeek.
+# The official Zeek image already carries Zeek and its policy scripts. It installs them
+# under /usr/local/zeek - not /opt/zeek, which is where zeek.org's own .deb packages land.
 FROM zeek/zeek:7.0
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/opt/zeek/bin:${PATH}"
+    ZEEK_PREFIX=/usr/local/zeek \
+    ZEEK_BINARY=/usr/local/zeek/bin/zeek \
+    PATH="/usr/local/zeek/bin:${PATH}"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip python3-venv \

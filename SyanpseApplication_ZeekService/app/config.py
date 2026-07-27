@@ -6,8 +6,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="ZEEK_", env_file=".env")
 
-    # Path to the Zeek binary inside the container image.
-    zeek_binary: str = "/opt/zeek/bin/zeek"
+    # Path to the Zeek binary. This is where the official zeek/zeek image installs it;
+    # zeek.org's .deb packages use /opt/zeek instead. If the path does not exist, the
+    # service falls back to whatever `zeek` is on PATH - see resolve_zeek_binary.
+    zeek_binary: str = "/usr/local/zeek/bin/zeek"
 
     # Parent directory for per-request workspaces. Each request gets its own subdirectory,
     # which is deleted once the response has been built.
