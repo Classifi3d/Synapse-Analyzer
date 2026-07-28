@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { describeApiError } from '@/config/axiosClient'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { describeApiError, isCancellation } from '@/config/axiosClient'
+import { queryKeys } from '@/config/queryKeys'
 import type { Analysis } from '@/types/analysis'
-import {
-  completeUpload,
-  initiateUpload,
-  uploadParts,
-  UploadError,
-  type UploadProgress,
-} from './uploadClient'
+import { completeUpload, initiateUpload } from './uploadApi'
+import { uploadParts, UploadError, type UploadProgress } from './uploadClient'
 
 export type UploadStage = 'idle' | 'initiating' | 'uploading' | 'finalizing'
 
 interface UploadVariables {
   file: File
   prompt?: string
+}
+
+export interface UploadFailure {
+  message: string
+  detail?: string
 }
 
 const IDLE_PROGRESS: UploadProgress = {
@@ -26,10 +27,16 @@ const IDLE_PROGRESS: UploadProgress = {
 }
 
 /**
- * Drives the three-step upload as one operation: open the session, push the parts
- * to storage, then have the API assemble them.
+ * Drives the whole upload as one operation: open the session, push the chunks to
+ * storage, then have the API assemble them.
+ *
+ * The three steps are a single mutation rather than three chained ones because they
+ * are not independently retryable - a session, its presigned urls and its ETags only
+ * mean anything together.
  */
 export function useCaptureUpload() {
+  const queryClient = useQueryClient()
+
   const [stage, setStage] = useState<UploadStage>('idle')
   const [progress, setProgress] = useState<UploadProgress>(IDLE_PROGRESS)
   const abortRef = useRef<AbortController | null>(null)
@@ -74,15 +81,21 @@ export function useCaptureUpload() {
         controller.signal,
       )
     },
+    onSuccess: (analysis) => {
+      queryClient.setQueryData(
+        queryKeys.analyses.detail(analysis.analysisId),
+        analysis,
+      )
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.analyses.lists() })
+    },
     onSettled: () => {
       abortRef.current = null
       setStage('idle')
     },
   })
 
-  const cancel = useCallback(() => {
-    abortRef.current?.abort()
-  }, [])
+  const cancel = useCallback(() => abortRef.current?.abort(), [])
 
   const reset = useCallback(() => {
     mutation.reset()
@@ -97,19 +110,12 @@ export function useCaptureUpload() {
     stage,
     progress,
     isUploading: mutation.isPending,
-    error: mutation.error ? toUploadMessage(mutation.error) : null,
+    error: mutation.error ? toUploadFailure(mutation.error) : null,
   }
 }
 
-interface UploadMessage {
-  message: string
-  detail?: string
-}
-
-function toUploadMessage(error: Error): UploadMessage {
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return { message: 'Upload cancelled.' }
-  }
+function toUploadFailure(error: Error): UploadFailure {
+  if (isCancellation(error)) return { message: 'Upload cancelled.' }
 
   if (error instanceof UploadError) {
     return error.detail

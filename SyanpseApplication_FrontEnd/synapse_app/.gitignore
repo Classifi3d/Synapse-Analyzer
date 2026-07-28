@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# TypeScript incremental build cache. Machine-specific, changes on every build.
+*.tsbuildinfo
+
 # Local environment. .env.example is the tracked template.
 .env
 .env.*

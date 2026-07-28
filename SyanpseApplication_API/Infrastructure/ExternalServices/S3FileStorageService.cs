@@ -67,7 +67,8 @@ public class S3FileStorageService : IFileStorageService
                 Verb = HttpVerb.PUT,
                 Expires = expiresAt,
                 UploadId = initiateResponse.UploadId,
-                PartNumber = partNumber
+                PartNumber = partNumber,
+                Protocol = ProtocolFor(PublicEndpoint)
             });
 
             parts.Add(new PresignedPart(partNumber, url));
@@ -163,7 +164,8 @@ public class S3FileStorageService : IFileStorageService
             BucketName = _options.BucketName,
             Key = objectKey,
             Verb = HttpVerb.GET,
-            Expires = DateTime.UtcNow.Add(lifetime)
+            Expires = DateTime.UtcNow.Add(lifetime),
+            Protocol = ProtocolFor(_options.Endpoint)
         });
     }
 
@@ -185,4 +187,28 @@ public class S3FileStorageService : IFileStorageService
     /// own quoting, so strip them first.
     /// </summary>
     private static string NormalizeETag(string eTag) => eTag.Trim().Trim('"');
+
+    /// <summary>Endpoint the browser reaches, falling back to the internal one.</summary>
+    private string PublicEndpoint =>
+        string.IsNullOrWhiteSpace(_options.PublicEndpoint)
+            ? _options.Endpoint
+            : _options.PublicEndpoint;
+
+    /// <summary>
+    /// Scheme to stamp into a presigned url.
+    /// </summary>
+    /// <remarks>
+    /// This has to be set explicitly. AWSSDK.S3 v4 resolves the scheme for presigned urls
+    /// through its endpoint provider rather than from <c>ServiceURL</c>, and defaults to
+    /// https - so an endpoint configured as http still produced https:// links, and the
+    /// browser failed with an SSL error against MinIO's plaintext port. Setting
+    /// <c>AmazonS3Config.UseHttp</c> does not change it either; only the per-request
+    /// Protocol does.
+    ///
+    /// The signature is unaffected: SigV4 signs the host header, not the scheme.
+    /// </remarks>
+    private static Protocol ProtocolFor(string endpoint) =>
+        endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? Protocol.HTTPS
+            : Protocol.HTTP;
 }

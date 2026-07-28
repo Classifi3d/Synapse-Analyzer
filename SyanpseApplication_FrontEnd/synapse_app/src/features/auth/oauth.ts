@@ -1,3 +1,4 @@
+import { describeApiError, ssoClient } from '@/config/axiosClient'
 import { env } from '@/config/env'
 import type { TokenResponse } from '@/types/auth'
 import { createCodeChallenge, createCodeVerifier, createState } from './pkce'
@@ -80,6 +81,9 @@ export async function exchangeCodeForTokens(
     )
   }
 
+  // URLSearchParams rather than a plain object: axios serializes it as
+  // application/x-www-form-urlencoded and sets the content type, which is what the
+  // form-bound token endpoint expects.
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -88,33 +92,26 @@ export async function exchangeCodeForTokens(
     code_verifier: verifier,
   })
 
-  let response: Response
+  let tokens: Partial<TokenResponse>
 
   try {
-    response = await fetch(`${env.sso.baseUrl}${TOKEN_ENDPOINT}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    })
+    const response = await ssoClient.post<Partial<TokenResponse>>(
+      TOKEN_ENDPOINT,
+      body,
+    )
+
+    tokens = response.data
   } catch (cause) {
+    // describeApiError already pulls `error_description` out of the RFC 6749 error
+    // body, which is where Cerberus explains a rejected grant.
     throw new OAuthError(
-      'Could not reach the SSO service.',
-      `${env.sso.baseUrl} did not respond. Check that Cerberus is running and that it allows this origin via CORS. (${String(cause)})`,
+      'The SSO service rejected the sign-in.',
+      describeApiError(cause, 'The token exchange failed.'),
     )
   } finally {
     // The verifier is single-use either way.
     loginAttemptStorage.clear()
   }
-
-  if (!response.ok) {
-    throw new OAuthError(
-      'The SSO service rejected the sign-in.',
-      (await response.text().catch(() => '')) ||
-        `The token endpoint returned ${response.status}.`,
-    )
-  }
-
-  const tokens = (await response.json()) as Partial<TokenResponse>
 
   if (!tokens.access_token) {
     throw new OAuthError(
