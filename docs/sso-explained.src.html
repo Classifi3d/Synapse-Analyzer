@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How Single Sign-On Works &mdash; from a password box to OpenID Connect</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  @page wide { size: A4 landscape; margin: 10mm 12mm; }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 10.3pt; line-height: 1.58; color: #1a1d23; margin: 0;
+  }
+
+  h1, h2, h3, h4 { color: #0f172a; line-height: 1.25; }
+  h1 { font-size: 25pt; margin: 0 0 6pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 15pt; margin: 26pt 0 9pt; padding-bottom: 5pt;
+    border-bottom: 2px solid #2563eb; break-after: avoid; page-break-after: avoid;
+  }
+  h3 { font-size: 11.8pt; margin: 16pt 0 6pt; break-after: avoid; page-break-after: avoid; }
+  h4 { font-size: 10.4pt; margin: 12pt 0 4pt; color: #334155; break-after: avoid; }
+
+  p { margin: 0 0 8pt; }
+  ul, ol { margin: 0 0 9pt; padding-left: 17pt; }
+  li { margin-bottom: 4pt; }
+
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.7pt; background: #eef2f7; padding: 1px 4px;
+    border-radius: 3px; color: #0b3d91; word-break: break-word;
+  }
+
+  pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.2pt; line-height: 1.45; background: #f8fafc; color: #0f172a;
+    border: 1px solid #d8e0ec; padding: 8pt 10pt; border-radius: 5px;
+    white-space: pre-wrap; word-break: break-word;
+    break-inside: avoid; page-break-inside: avoid; margin: 0 0 10pt;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  /* Diagrams are authored in <pre class="mermaid">; without this they inherit the
+     code-block frame above and every figure ends up boxed in. */
+  pre.mermaid {
+    background: none; border: none; padding: 0; margin: 0;
+    border-radius: 0; white-space: normal;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: 8.9pt; margin: 0 0 11pt;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  th, td { border: 1px solid #cbd5e1; padding: 4.5pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; font-weight: 600; color: #0f172a; }
+  td code { font-size: 8.2pt; }
+
+  .cover { border-bottom: 3px solid #2563eb; padding-bottom: 14pt; margin-bottom: 16pt; }
+  .subtitle { font-size: 12.5pt; color: #475569; margin: 0 0 10pt; }
+  .meta { font-size: 8.9pt; color: #64748b; }
+
+  .callout {
+    border-left: 3px solid #2563eb; background: #f1f5f9;
+    padding: 8pt 11pt; margin: 0 0 11pt; border-radius: 0 4px 4px 0;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .callout.warn { border-left-color: #d97706; background: #fffbeb; }
+  .callout.bad  { border-left-color: #dc2626; background: #fef2f2; }
+  .callout.ok   { border-left-color: #059669; background: #ecfdf5; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    display: block; font-size: 7.8pt; font-weight: 700; letter-spacing: 0.6pt;
+    text-transform: uppercase; margin-bottom: 3pt; color: #2563eb;
+  }
+  .callout.warn .label { color: #b45309; }
+  .callout.bad  .label { color: #b91c1c; }
+  .callout.ok   .label { color: #047857; }
+
+  .diagram { text-align: center; margin: 12pt 0 14pt; break-inside: avoid; page-break-inside: avoid; }
+  .diagram svg { max-width: 100%; max-height: 232mm; width: auto; height: auto; background-color: #fff !important; }
+  .diagram-wide {
+    page: wide; margin: 0;
+    break-before: page; page-break-before: always;
+    break-after: page;  page-break-after: always;
+  }
+  .diagram-wide svg { max-height: 162mm; }
+  .caption { font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 5pt; text-align: center; }
+
+  .page-break { break-before: page; page-break-before: always; }
+
+  .toc { font-size: 9.7pt; }
+  .toc ol { padding-left: 20pt; }
+  .toc > ol > li { margin-bottom: 4pt; font-weight: 600; }
+
+  .stage-head {
+    background: #eef2f7; border-left: 4px solid #2563eb;
+    padding: 7pt 11pt; margin: 0 0 11pt; border-radius: 0 4px 4px 0;
+    break-inside: avoid;
+  }
+  .stage-head .n {
+    font-size: 8pt; font-weight: 700; letter-spacing: 0.8pt;
+    text-transform: uppercase; color: #2563eb; display: block; margin-bottom: 2pt;
+  }
+  .stage-head .t { font-size: 12.5pt; font-weight: 600; color: #0f172a; }
+  .stage-head .adds { font-size: 9pt; color: #475569; margin-top: 3pt; }
+
+  .sw {
+    display: inline-block; width: 9pt; height: 9pt; border-radius: 2px;
+    vertical-align: -1px; margin-right: 4pt; border: 1px solid rgba(0,0,0,.18);
+  }
+  .k-cred    { color: #b91c1c; font-weight: 600; }
+  .k-session { color: #047857; font-weight: 600; }
+  .k-client  { color: #6d28d9; font-weight: 600; }
+  .k-token   { color: #b45309; font-weight: 600; }
+  .k-pkce    { color: #1d4ed8; font-weight: 600; }
+
+  .small { font-size: 8.9pt; color: #475569; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>How Single Sign-On Works</h1>
+  <p class="subtitle">From a password box to OpenID Connect, one problem at a time</p>
+  <p class="meta">
+    Seven stages. Each one starts from the previous design, gets attacked, and adds exactly
+    the one value needed to survive that attack. By the end you will have derived the
+    authorization code flow with PKCE, and the OpenID Connect layer on top of it, rather
+    than been handed either.
+  </p>
+</div>
+
+<div class="toc">
+<strong style="font-size:11pt;">Contents</strong>
+<ol>
+  <li>How to read this &mdash; the colour code</li>
+  <li>Stage 1 &mdash; One app, one password</li>
+  <li>Stage 2 &mdash; Two apps, and the temptation to share the password</li>
+  <li>Stage 3 &mdash; Never let the app see the password: redirects</li>
+  <li>Stage 4 &mdash; Naming the app, and proving the round trip: <code>client_id</code> and <code>state</code></li>
+  <li>Stage 5 &mdash; Getting the token out of the browser: the authorization code</li>
+  <li>Stage 6 &mdash; When you cannot keep a secret: PKCE</li>
+  <li>Stage 7 &mdash; Asking a different question: OpenID Connect</li>
+  <li>The whole ladder in one table</li>
+  <li>Mapping it onto Cerberus and Synapse</li>
+</ol>
+</div>
+
+<h2>1. How to read this &mdash; the colour code</h2>
+
+<p>
+Every stage of this story is really about <strong>one question</strong>: who is allowed to
+see this particular value? Almost every security property in SSO follows from that, and
+almost every historical vulnerability came from a value reaching someone it should not
+have.
+</p>
+
+<p>
+So the values in the diagrams are coloured by <em>audience</em> rather than by what they
+technically are. Learn these five and the flows read themselves.
+</p>
+
+<table>
+  <tr>
+    <th style="width:15%">Colour</th><th style="width:22%">Group</th>
+    <th style="width:28%">Examples</th><th>Who may ever see it</th>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:#b91c1c"></span><span class="k-cred">Red</span></td>
+    <td><strong>User credentials</strong></td>
+    <td><code>password</code>, TOTP code</td>
+    <td><strong>Only the identity provider.</strong> The crown jewels. If any other party sees this, the whole model has failed.</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:#047857"></span><span class="k-session">Green</span></td>
+    <td><strong>Session state</strong></td>
+    <td><code>session_id</code>, session cookie</td>
+    <td>One server and the user's browser. Says "this browser already proved who it is".</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:#6d28d9"></span><span class="k-client">Purple</span></td>
+    <td><strong>Application identity</strong></td>
+    <td><code>client_id</code>, <code>client_secret</code>, registered <code>redirect_uri</code></td>
+    <td>Identifies and authenticates the <em>application</em>, not the user. The id is public; the secret is not, and only a server can hold one.</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:#b45309"></span><span class="k-token">Amber</span></td>
+    <td><strong>Bearer tokens</strong></td>
+    <td><code>access_token</code>, <code>refresh_token</code></td>
+    <td>"Bearer" is literal: whoever holds it can use it. Treated as a credential in transit and kept short-lived.</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:#1d4ed8"></span><span class="k-pkce">Blue</span></td>
+    <td><strong>Single-use flow plumbing</strong></td>
+    <td><code>code</code>, <code>state</code>, <code>code_verifier</code>, <code>code_challenge</code></td>
+    <td>Exists only for the seconds a login takes. Each one binds two halves of a flow together so they cannot be mixed and matched by an attacker.</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <span class="label">The one sentence to keep</span>
+  <p>
+  Every stage below adds a value because a <em>specific attack</em> was possible without
+  it. If you can name the attack, you can always re-derive why the value exists &mdash;
+  which is far more durable than memorising the parameter list.
+  </p>
+</div>
+
+<h2>2. Stage 1 &mdash; One app, one password</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 1</span>
+  <span class="t">A single application authenticates its own users</span>
+  <div class="adds">Introduces: <span class="k-cred">password</span>, <span class="k-session">session_id</span></div>
+</div>
+
+<p>
+Start with no SSO at all. One application, its own user table. Alice types an email and a
+password; the app compares the password against a stored hash and, if it matches, marks
+the browser as logged in.
+</p>
+
+<p>
+The interesting part is the second half. The app does <em>not</em> ask for the password
+again on the next request &mdash; it issues a <span class="k-session">session_id</span>: a
+long random string stored in a cookie. That is the first appearance of the central idea of
+this whole document:
+</p>
+
+<div class="callout ok">
+  <span class="label">Idea 1</span>
+  <p>
+  A credential is exchanged, once, for a <strong>less powerful, shorter-lived stand-in</strong>.
+  The password proves identity; the session id merely proves that a password was checked
+  recently. Every later stage is a more elaborate version of this same trade.
+  </p>
+</div>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant P as Photo App
+    participant DB as User table
+
+    A->>P: opens /login
+    P-->>A: login form
+
+    A->>P: submits email<br/>password
+    P->>DB: look up email
+    DB-->>P: stored password hash
+    Note over P: bcrypt compare<br/>the password against the hash
+
+    P-->>A: Set-Cookie: session_id
+    Note over A,P: the password is never sent again
+
+    A->>P: GET /photos<br/>Cookie: session_id
+    P->>P: look up session_id<br/>-> Alice
+    P-->>A: Alice's photos
+</pre>
+<div class="caption">Figure 1 &mdash; Classic password login. The password (red) appears exactly once;
+everything after that runs on the session id (green).</div>
+</div>
+
+<h3>Notable unhappy flow: a guessable session id</h3>
+
+<p>
+If <span class="k-session">session_id</span> were sequential &mdash; <code>1001</code>,
+<code>1002</code> &mdash; an attacker would simply try other numbers and land inside
+someone else's account without ever touching a password. This is why session ids must come
+from a cryptographic random source with enough entropy to make guessing hopeless.
+</p>
+
+<p>
+That constraint never goes away. Every blue and green value in this document has the same
+requirement, for the same reason. When you see later that a PKCE verifier must be at least
+43 characters, it is this same rule reappearing.
+</p>
+
+<div class="page-break"></div>
+
+<h2>3. Stage 2 &mdash; Two apps, and the temptation to share the password</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 2</span>
+  <span class="t">A second app appears, and asks for the first app's password</span>
+  <div class="adds">Introduces: nothing new &mdash; and that is exactly the problem</div>
+</div>
+
+<p>
+Now there is a second application, Print Shop, which wants to print Alice's photos. It
+needs access to her Photo App account. The obvious implementation is the wrong one, and
+seeing precisely <em>why</em> it is wrong is what motivates everything else.
+</p>
+
+<p>
+Print Shop shows a form: "enter your Photo App email and password". It then replays those
+credentials against Photo App on Alice's behalf. It works perfectly. It is also a
+catastrophe.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant PS as Print Shop
+    participant P as Photo App
+
+    A->>PS: submits Photo App email<br/>password
+    Note over PS: Print Shop now holds<br/>Alice's Photo App password
+
+    PS->>P: log in as Alice<br/>password
+    P-->>PS: Set-Cookie: session_id
+    PS->>P: GET /photos<br/>Cookie: session_id
+    P-->>PS: all of Alice's photos
+
+    rect rgb(254, 242, 242)
+        Note over PS: Print Shop can now:<br/>read every photo, not just the ones Alice wanted printed<br/>change her password and lock her out<br/>keep the password forever, with no way for Alice to revoke it<br/>reuse it on her email and bank, because people reuse passwords
+    end
+</pre>
+<div class="caption">Figure 2 &mdash; Credential sharing. Functionally correct, and the reason
+delegated authorization had to be invented.</div>
+</div>
+
+<h3>Why this is unfixable by being careful</h3>
+
+<p>Four problems, and none of them are solved by Print Shop being well-intentioned:</p>
+
+<ul>
+  <li><strong>No scope.</strong> A password is all-or-nothing. There is no way to say "may
+  read photos, may not delete them".</li>
+  <li><strong>No revocation.</strong> Alice cannot withdraw Print Shop's access without
+  changing her password, which also signs her out everywhere else.</li>
+  <li><strong>Unbounded blast radius.</strong> Print Shop's database is now as sensitive as
+  Photo App's. Every integration multiplies the number of places the password can leak
+  from.</li>
+  <li><strong>It trains users to be phished.</strong> If legitimate sites ask for another
+  site's password, users cannot tell a real request from a fake one.</li>
+</ul>
+
+<div class="callout bad">
+  <span class="label">The rule that follows</span>
+  <p>
+  <strong>The password must only ever be typed into the identity provider itself.</strong>
+  No third-party application may see it &mdash; not in transit, not in memory, not for a
+  moment. Everything from here on exists to satisfy this rule while still letting Print
+  Shop do its job.
+  </p>
+</div>
+
+<p>
+And that rule has an immediate mechanical consequence. If Alice must type her password
+into Photo App's own page, then her <em>browser</em> has to go to Photo App, and come back.
+The redirect is not an implementation detail chosen for convenience &mdash; it is forced
+on us by the rule above.
+</p>
+
+<div class="page-break"></div>
+
+<h2>4. Stage 3 &mdash; Never let the app see the password: redirects</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 3</span>
+  <span class="t">Send the user to the identity provider; get a token back</span>
+  <div class="adds">Introduces: <span class="k-token">access_token</span>, <span class="k-client">redirect_uri</span></div>
+</div>
+
+<p>
+Photo App becomes an identity provider. Print Shop no longer collects credentials at all.
+Instead it sends Alice's browser to Photo App with a note saying "when you are done, send
+her back here". Alice authenticates on Photo App's own domain, sees Photo App's own URL in
+the address bar, and Photo App redirects her back carrying an
+<span class="k-token">access_token</span>.
+</p>
+
+<p>
+Print Shop uses that token to call Photo App's API. It never sees the password. Notice what
+has been gained: the token can be scoped to "read photos", it can expire, and Alice can
+revoke it without touching her password.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant PS as Print Shop
+    participant P as Photo App
+
+    A->>PS: "Import my photos"
+    PS-->>A: redirect to Photo App<br/>redirect_uri=https://printshop.example/cb
+
+    A->>P: login page (Photo App's own domain)
+    A->>P: submits password
+    Note over P: only Photo App ever sees this
+
+    P-->>A: redirect to redirect_uri<br/>access_token=ya29.a0Af...
+    A->>PS: GET /cb<br/>access_token=ya29.a0Af...
+
+    PS->>P: GET /api/photos<br/>Authorization: Bearer access_token
+    P-->>PS: only the photos, only for a while
+</pre>
+<div class="caption">Figure 3 &mdash; The redirect model. The password stays inside the identity
+provider; a scoped, expiring token crosses the boundary instead.</div>
+</div>
+
+<h3>Notable unhappy flow: the open redirect &mdash; and it is devastating</h3>
+
+<p>
+Look closely at step 2. Print Shop told Photo App where to send the token, and Photo App
+simply believed it. Nothing stops an attacker from crafting a link that starts a real login
+against the real Photo App, but names <em>their own</em> server as the destination.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant E as evil.example
+    participant P as Photo App
+
+    E-->>A: emails a link that looks legitimate
+    A->>P: /authorize<br/>redirect_uri=https://evil.example/steal
+
+    Note over A,P: everything here is genuine.<br/>Real Photo App, real domain, real padlock.
+    A->>P: submits password
+    Note over P: Photo App has no reason to refuse:<br/>the user authenticated correctly
+
+    rect rgb(254, 242, 242)
+        P-->>A: redirect to evil.example<br/>access_token=ya29.a0Af...
+        A->>E: GET /steal<br/>access_token=ya29.a0Af...
+        Note over E: the attacker now holds a valid token<br/>for Alice's account
+    end
+</pre>
+<div class="caption">Figure 4 &mdash; Token exfiltration through an attacker-supplied redirect_uri.
+Alice did nothing wrong and saw nothing suspicious.</div>
+</div>
+
+<p>
+The fix is not to validate the URL cleverly. It is to <strong>refuse to accept the
+destination from the request at all</strong>. The application registers its
+<span class="k-client">redirect_uri</span> with the identity provider in advance, and at
+login time the value sent must match the registered one exactly.
+</p>
+
+<div class="callout warn">
+  <span class="label">Why "exactly" is not pedantry</span>
+  <p>
+  Matching by prefix or by domain has repeatedly proven exploitable &mdash; an open
+  redirector anywhere on the registered domain turns into token theft, and a trailing-path
+  match lets an attacker append their own. Exact string comparison is the only rule with no
+  known bypass, and it is why a stray trailing slash in your configuration will be rejected
+  outright. That strictness is a feature.
+  </p>
+</div>
+
+<p>
+But registering the redirect uri raises a new question. Photo App now needs to know
+<em>which</em> registration to check against &mdash; that is, which application is asking.
+</p>
+
+<div class="page-break"></div>
+
+<h2>5. Stage 4 &mdash; Naming the app, and proving the round trip</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 4</span>
+  <span class="t">Identify the application, and tie the response to the request</span>
+  <div class="adds">Introduces: <span class="k-client">client_id</span>, <span class="k-pkce">state</span></div>
+</div>
+
+<p>
+<span class="k-client">client_id</span> is the answer to "which application is asking". It
+is a public identifier &mdash; it appears in URLs and in browser history, and that is fine,
+because on its own it grants nothing. Its job is to select the registration that holds the
+allowed <span class="k-client">redirect_uri</span>.
+</p>
+
+<p>
+With those two, the flow is meaningfully safe against the previous attack. But one gap
+remains, and it is a subtle one: <strong>nothing ties the response Print Shop receives to a
+request Print Shop actually started.</strong>
+</p>
+
+<h3>Notable unhappy flow: login CSRF</h3>
+
+<p>
+An attacker begins a login for <em>their own</em> Photo App account, stops at the point
+where they receive their token, and then tricks Alice's browser into visiting the callback
+URL carrying it. Alice's Print Shop session silently becomes linked to the attacker's Photo
+App account. She then uploads her private photos into what is, unknowingly, the attacker's
+storage.
+</p>
+
+<p>
+The defence is <span class="k-pkce">state</span>: a random value the client generates,
+stashes locally, sends with the request, and compares on return. A callback carrying a
+state the client never issued is discarded.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant PS as Print Shop
+    participant P as Photo App
+    actor E as Attacker
+
+    Note over E,P: the attacker logs in as themselves and keeps the callback url
+    E->>P: /authorize<br/>client_id=print-shop
+    P-->>E: redirect<br/>access_token=attacker's token
+
+    rect rgb(254, 242, 242)
+        E-->>A: tricks Alice into loading that callback url
+        A->>PS: GET /cb<br/>access_token=attacker's token<br/>state=(absent)
+        Note over PS: with no state to check,<br/>Print Shop accepts it
+        Note over A,PS: Alice is now using Print Shop<br/>bound to the attacker's account
+    end
+
+    Note over PS,P: with state, the same attempt dies immediately
+    PS->>PS: generate state=8f3c...<br/>store it locally
+    PS-->>A: redirect<br/>client_id=print-shop<br/>state=8f3c...
+    A->>PS: GET /cb<br/>state=(attacker's, or missing)
+    Note over PS: does not match the stored state<br/>-> reject, abandon the login
+</pre>
+<div class="caption">Figure 5 &mdash; Login CSRF, and how <code>state</code> stops it. The check is
+"did <em>I</em> start this?", not "is this user valid?".</div>
+</div>
+
+<div class="callout">
+  <span class="label">A useful distinction</span>
+  <p>
+  <span class="k-pkce">state</span> protects the <em>client</em> from accepting a response
+  it did not ask for. It is not about proving anything to the identity provider. Keep that
+  separate in your head from PKCE, which is about proving something <em>to</em> the identity
+  provider &mdash; they are often confused because both are random blue values generated by
+  the client.
+  </p>
+</div>
+
+<h3>The problem that remains: the token is in the URL</h3>
+
+<p>
+Stage 4 is roughly the old <strong>implicit flow</strong>, and it was the standard advice
+for browser applications for years. Its weakness is structural, and no amount of validation
+fixes it: the <span class="k-token">access_token</span> is delivered
+<em>through the browser's address bar</em>. That means it can land in:
+</p>
+
+<ul>
+  <li>browser history, and anything that syncs it,</li>
+  <li>server access logs, if the URL is ever sent onward,</li>
+  <li><code>Referer</code> headers to third parties,</li>
+  <li>any script running on the callback page, including injected ones.</li>
+</ul>
+
+<p>
+And this is a token that may be valid for an hour and usable from anywhere. The next stage
+fixes this by never letting the real token touch the browser.
+</p>
+
+<div class="page-break"></div>
+
+<h2>6. Stage 5 &mdash; Getting the token out of the browser</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 5</span>
+  <span class="t">Return a useless one-time ticket; redeem it out of band</span>
+  <div class="adds">Introduces: <span class="k-pkce">authorization code</span>, <span class="k-client">client_secret</span></div>
+</div>
+
+<p>
+The insight is to split the return trip in two. Through the browser, the identity provider
+sends only an <span class="k-pkce">authorization code</span>: a short-lived, single-use
+ticket that is worthless on its own. Print Shop's <em>server</em> then exchanges that code
+for the real token over a direct HTTPS connection that the browser never sees.
+</p>
+
+<p>
+What makes the code worthless to a thief is the second new value: the
+<span class="k-client">client_secret</span>, shared between Print Shop's server and Photo
+App when the application was registered. Redeeming a code requires it.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant B as Alice's browser
+    participant PS as Print Shop server
+    participant P as Photo App
+
+    A->>PS: "Import my photos"
+    PS-->>B: redirect<br/>client_id=print-shop<br/>state=8f3c...<br/>response_type=code
+
+    B->>P: login page
+    A->>P: submits password
+    Note over P: authenticated. mint a code,<br/>store who and which client it is for
+
+    P-->>B: redirect<br/>code=SplxlOB<br/>state=8f3c...
+    B->>PS: GET /cb<br/>code=SplxlOB<br/>state=8f3c...
+    Note over PS: state matches the one we stored
+
+    rect rgb(236, 253, 245)
+        Note over PS,P: back channel: server to server, no browser involved
+        PS->>P: POST /token<br/>code=SplxlOB<br/>client_id=print-shop<br/>client_secret=s3cr3t
+        Note over P: code exists, unused, not expired?<br/>client_secret correct?<br/>then delete the code
+        P-->>PS: access_token=ya29.a0Af...
+    end
+
+    Note over B: the browser never saw the token
+</pre>
+<div class="caption">Figure 6 &mdash; The authorization code flow. Only the blue single-use code
+crosses the browser; the amber token travels server to server.</div>
+</div>
+
+<h3>Notable unhappy flow: the code is stolen anyway</h3>
+
+<p>
+Suppose an attacker does capture the code &mdash; from a log, over the shoulder, via a
+malicious browser extension. They try to redeem it:
+</p>
+
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor E as Attacker
+    participant P as Photo App
+
+    E->>P: POST /token<br/>code=SplxlOB<br/>client_id=print-shop
+    Note over P: no client_secret supplied
+    P-->>E: 400 invalid_client
+
+    E->>P: POST /token<br/>code=SplxlOB<br/>client_secret=guess
+    P-->>E: 400 invalid_client
+    Note over E: the code is useless without<br/>a secret only Print Shop's server holds
+</pre>
+<div class="caption">Figure 7 &mdash; A stolen code is inert. This is the property that makes the
+code flow safe to route through a browser.</div>
+</div>
+
+<p>Three further rules make this hold up, and each one has a reason:</p>
+
+<ul>
+  <li><strong>Single use.</strong> The code is deleted the moment it is redeemed. If one is
+  ever presented twice, the honest party and an attacker have both used it &mdash; a strong
+  signal to revoke everything issued from it.</li>
+  <li><strong>Short lifetime.</strong> Typically under a minute, because it only has to
+  survive one redirect.</li>
+  <li><strong>Bound to the same <code>redirect_uri</code>.</strong> The value sent at the
+  token step must match the one the code was issued for, so a code obtained through one
+  registration cannot be redeemed as another.</li>
+</ul>
+
+<div class="callout bad">
+  <span class="label">And now the wall</span>
+  <p>
+  This entire design rests on <span class="k-client">client_secret</span> being secret.
+  That works for a server. It is <strong>impossible</strong> for a single-page app, a mobile
+  app, or a desktop app: anything shipped to the user's device can be read by the user, and
+  therefore by an attacker. Putting a secret in JavaScript is not a weaker version of this
+  design &mdash; it is the same as having no secret at all, while pretending otherwise.
+  </p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>7. Stage 6 &mdash; When you cannot keep a secret: PKCE</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 6</span>
+  <span class="t">Replace the long-lived shared secret with a per-login proof</span>
+  <div class="adds">Introduces: <span class="k-pkce">code_verifier</span>, <span class="k-pkce">code_challenge</span></div>
+</div>
+
+<p>
+A public client cannot hold a secret that is the same every time, because that secret would
+have to ship with the app. But it <em>can</em> invent a brand-new secret for each individual
+login, keep it in memory, and prove it knew it &mdash; without ever transmitting it where an
+interceptor could catch it.
+</p>
+
+<p>That is Proof Key for Code Exchange, and the mechanism is a one-way hash:</p>
+
+<ol>
+  <li>Before redirecting, the app generates a random
+  <span class="k-pkce">code_verifier</span> and keeps it locally.</li>
+  <li>It sends only <code>SHA-256(verifier)</code> &mdash; the
+  <span class="k-pkce">code_challenge</span> &mdash; with the authorization request.</li>
+  <li>The provider stores that challenge next to the code it issues.</li>
+  <li>At the token endpoint the app presents the original verifier. The provider hashes it
+  and compares.</li>
+</ol>
+
+<p>
+The challenge travels through the browser and may be observed. That is harmless: SHA-256
+cannot be reversed, so seeing the challenge tells an attacker nothing about the verifier.
+The verifier travels only on the direct back-channel call, together with the code.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant S as Single-page app<br/>(no secret possible)
+    participant P as Photo App
+
+    Note over S: code_verifier = 128 random chars, kept in memory<br/>code_challenge = BASE64URL(SHA256(code_verifier))<br/>state = 32 random chars
+
+    S-->>A: redirect<br/>client_id=print-shop<br/>state=8f3c...<br/>code_challenge=E9Melhoa<br/>code_challenge_method=S256
+
+    A->>P: login page
+    A->>P: submits password
+    Note over P: store the code, and beside it<br/>code_challenge<br/>redirect_uri
+
+    P-->>A: redirect<br/>code=SplxlOB<br/>state=8f3c...
+    A->>S: /callback<br/>code=SplxlOB<br/>state=8f3c...
+    Note over S: state matches
+
+    rect rgb(236, 253, 245)
+        S->>P: POST /token<br/>code=SplxlOB<br/>client_id=print-shop<br/>code_verifier=dBjftJeZ4CVP
+        Note over P: SHA256(code_verifier)<br/>== stored code_challenge?
+        P-->>S: access_token=ya29.a0Af...
+    end
+</pre>
+<div class="caption">Figure 8 &mdash; Authorization code with PKCE. No client secret anywhere, and
+the code is still useless to anyone who intercepts it.</div>
+</div>
+
+<h3>Notable unhappy flow: code interception on a public client</h3>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor E as Attacker
+    participant P as Photo App
+
+    Note over E: the attacker has intercepted the redirect and holds<br/>code=SplxlOB and code_challenge=E9Melhoa
+
+    rect rgb(254, 242, 242)
+        Note over E,P: without PKCE, on a public client, this is all it takes
+        E->>P: POST /token<br/>code=SplxlOB<br/>client_id=print-shop
+        P-->>E: access_token — full account takeover
+    end
+
+    rect rgb(236, 253, 245)
+        Note over E,P: with PKCE, the attacker is missing the one thing that never travelled
+        E->>P: POST /token<br/>code=SplxlOB<br/>code_verifier=(guess)
+        Note over P: SHA256(guess) != stored challenge
+        P-->>E: 400 invalid_grant
+
+        E->>P: POST /token<br/>code=SplxlOB<br/>code_challenge=E9Melhoa
+        Note over P: the challenge is not the verifier.<br/>Replaying what was observed proves nothing.
+        P-->>E: 400 invalid_grant
+    end
+</pre>
+<div class="caption">Figure 9 &mdash; The same interception, with and without PKCE. Note the second
+attempt: replaying the observed challenge does not work, which is the whole point of hashing.</div>
+</div>
+
+<h3>Three details that look fussy and are not</h3>
+
+<ul>
+  <li><strong>Only <code>S256</code>, never <code>plain</code>.</strong> The spec also allows
+  sending the verifier itself as the challenge. That would put the verifier through the
+  browser &mdash; exactly the exposure PKCE exists to avoid &mdash; so an attacker who saw
+  the authorization request would have everything.</li>
+  <li><strong>43&ndash;128 characters.</strong> A short verifier could be brute-forced from
+  the challenge, since the attacker can hash candidates offline as fast as hardware allows.
+  The length bound is what makes that infeasible; it is a security control, not input
+  tidiness.</li>
+  <li><strong>Compare in fixed time.</strong> A normal string comparison stops at the first
+  differing byte, and the timing difference leaks the expected value one byte at a time.</li>
+</ul>
+
+<div class="callout ok">
+  <span class="label">Where we landed</span>
+  <p>
+  PKCE is now recommended for <em>all</em> clients, including ones that do have a secret.
+  A per-login proof defends against a stolen code even if the client secret itself has
+  leaked, so the two mechanisms are complementary rather than alternatives.
+  </p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>8. Stage 7 &mdash; Asking a different question: OpenID Connect</h2>
+
+<div class="stage-head">
+  <span class="n">Stage 7</span>
+  <span class="t">The flow answered "may this app act for the user". It never answered "who is the user".</span>
+  <div class="adds">Introduces: <span class="k-token">id_token</span>, <span class="k-pkce">nonce</span>, <code>scope=openid</code></div>
+</div>
+
+<p>
+Everything so far solved <strong>authorization</strong>: Print Shop ended up holding an
+<span class="k-token">access_token</span> that lets it call the photos API. Notice what it
+never obtained &mdash; any trustworthy statement about <em>who Alice is</em>.
+</p>
+
+<p>
+That gap is easy to miss because the flow obviously involved a login. But look at what the
+access token actually is: a key addressed to the <em>resource server</em>. It says "the
+bearer may read photos". It does not say "the person who authorized this was Alice", it is
+not addressed to Print Shop, and Print Shop is not supposed to open it at all &mdash; to a
+client, an access token is an opaque string.
+</p>
+
+<div class="callout bad">
+  <span class="label">The mistake this causes</span>
+  <p>
+  The tempting shortcut is: "I got an access token, so I'll call <code>/userinfo</code> with
+  it, and whoever it returns is my logged-in user." That is <strong>not</strong> a valid
+  login, and it was a real and widespread vulnerability in the years before OIDC settled it.
+  The next diagram shows why.
+  </p>
+</div>
+
+<h3>Notable unhappy flow: token substitution</h3>
+
+<p>
+An access token carries no binding to the application that received it. So a token obtained
+legitimately by <em>one</em> app can be presented to <em>another</em> app that treats it as
+proof of identity.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor E as Attacker
+    participant EA as evil-app<br/>(a real, registered client)
+    participant V as Victim App<br/>"log in with Photo App"
+    participant P as Photo App
+
+    Note over E,EA: step 1 - the attacker gets a genuine token, for their own account
+    E->>EA: signs in to evil-app normally
+    EA->>P: authorization code flow
+    P-->>EA: access_token=for-attacker
+
+    rect rgb(254, 242, 242)
+        Note over EA,V: step 2 - replay it at a different app that logs users in this way
+        EA->>V: "log me in", here is access_token=for-attacker
+        V->>P: GET /userinfo<br/>Authorization: Bearer access_token
+        P-->>V: { sub: "attacker" }
+        Note over V: the token is genuine and unexpired,<br/>so Victim App accepts it
+    end
+
+    Note over V,P: the token never said who it was issued TO,<br/>so Victim App had nothing to check
+</pre>
+<div class="caption">Figure 10 &mdash; Token substitution. Every message here is a valid token used
+in a valid way; the flaw is treating an authorization key as an identity assertion.</div>
+</div>
+
+<p>
+The reason this works is precise and worth stating exactly: <strong>the access token has no
+audience the client can verify.</strong> Fixing it needs a second artefact that is addressed
+to the client, and that is the whole idea of OpenID Connect.
+</p>
+
+<h3>What OIDC adds</h3>
+
+<p>
+OIDC is a thin identity layer on top of the same authorization code flow. The redirects are
+unchanged. The client adds <code>scope=openid</code> to the authorization request, and the
+provider returns one extra thing alongside the access token:
+</p>
+
+<table>
+  <tr><th style="width:26%">Artefact</th><th>What it is</th></tr>
+  <tr>
+    <td><span class="k-token">access_token</span></td>
+    <td>A key <strong>for the resource server</strong>. Opaque to the client. Answers: <em>may the bearer call this API?</em></td>
+  </tr>
+  <tr>
+    <td><span class="k-token">id_token</span></td>
+    <td>A signed statement <strong>for the client</strong>, always a JWT. Answers: <em>who signed in, at which provider, and for which application?</em></td>
+  </tr>
+</table>
+
+<p>Both are amber &mdash; but they are not interchangeable, and the difference is the entire point:</p>
+
+<ul>
+  <li>An access token is <em>used</em>; it is sent onward to an API. Never parse it, never
+  trust its contents as a login.</li>
+  <li>An id_token is <em>read</em>; it is never sent anywhere. It is your login receipt, and
+  it must be validated on arrival.</li>
+</ul>
+
+<p>The client validates an id_token by checking, at minimum:</p>
+
+<ul>
+  <li><code>iss</code> &mdash; issued by the provider I actually redirected to;</li>
+  <li><code>aud</code> &mdash; issued <strong>for me</strong>, matching my <span class="k-client">client_id</span>. This is the check that defeats token substitution;</li>
+  <li><code>exp</code> &mdash; not expired;</li>
+  <li>the <strong>signature</strong>, against the provider's published public key;</li>
+  <li><code>nonce</code> &mdash; matches the one I sent (below).</li>
+</ul>
+
+<div class="callout">
+  <span class="label">Why discovery and JWKS exist</span>
+  <p>
+  Validating that signature requires the provider's public key, and knowing <em>which</em>
+  key when providers rotate them. That is the entire reason for
+  <code>/.well-known/openid-configuration</code> and <code>jwks_uri</code> &mdash; the same
+  two endpoints your <code>WellKnownController</code> serves. They are OIDC machinery, which
+  is why plain OAuth 2.0 has no equivalent.
+  </p>
+</div>
+
+<h3>The nonce, and the attack it stops</h3>
+
+<p>
+<span class="k-pkce">state</span> tied the <em>redirect</em> to a request this client
+started. <span class="k-pkce">nonce</span> does the analogous job one level down: it ties
+the <em>id_token itself</em> to this specific authorization request.
+</p>
+
+<p>
+Without it, an attacker who captured a valid id_token &mdash; for their own account, from
+anywhere &mdash; could inject it into a victim's in-flight login and have the client accept
+it as the login result. The client generates a random nonce, sends it with the request, and
+the provider copies it into the id_token it mints. An id_token whose nonce does not match
+the one this browser sent is discarded.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Alice
+    participant S as Client app
+    participant P as Photo App
+    actor E as Attacker
+
+    Note over S: code_verifier + code_challenge as before<br/>state = 8f3c...<br/>nonce = 9b71...
+
+    S-->>A: redirect<br/>client_id=print-shop<br/>scope=openid profile email<br/>state=8f3c...<br/>nonce=9b71...<br/>code_challenge=E9Melhoa
+
+    A->>P: submits password
+    P-->>A: redirect<br/>code=SplxlOB<br/>state=8f3c...
+
+    rect rgb(254, 242, 242)
+        Note over E,S: injection attempt - a genuine id_token, for the attacker's account
+        E-->>S: id_token with sub=attacker, nonce=(different)
+        Note over S: nonce does not match 9b71...<br/>-> reject
+    end
+
+    rect rgb(236, 253, 245)
+        S->>P: POST /token<br/>code=SplxlOB<br/>code_verifier=dBjftJeZ4CVP
+        P-->>S: access_token=ya29.a0Af...<br/>id_token=eyJhbGciOiJSUzI1NiJ9...
+        Note over S: verify signature against JWKS<br/>iss = the provider I used?<br/>aud = my client_id?<br/>nonce = 9b71...?<br/>exp in the future?
+        Note over S: only now is Alice logged in
+    end
+</pre>
+<div class="caption">Figure 11 &mdash; OIDC on top of code + PKCE. The redirects are unchanged; the
+new work is the validation the client performs on arrival.</div>
+</div>
+
+<h3>One more classic: trusting the token's own header</h3>
+
+<p>
+A JWT states its own signing algorithm in its header. Early libraries obeyed it, so an
+attacker could send <code>{"alg":"none"}</code> with no signature, or swap
+<code>RS256</code> for <code>HS256</code> and sign with the provider's <em>public</em> key
+&mdash; which is, after all, public. The rule is to decide the acceptable algorithm from
+configuration and reject anything else, never to let the token nominate how it should be
+verified.
+</p>
+
+<div class="callout ok">
+  <span class="label">The distinction to carry away</span>
+  <p>
+  <strong>OAuth 2.0 answers "what may this app do".</strong>
+  <strong>OpenID Connect answers "who is this user".</strong>
+  They are so often deployed together that people treat them as one protocol, but almost
+  every identity bug in the wild comes from using an authorization answer to a question it
+  was never asked.
+  </p>
+</div>
+
+<h2>9. The whole ladder in one table</h2>
+
+<table>
+  <tr>
+    <th style="width:8%">Stage</th><th style="width:22%">Added</th>
+    <th style="width:35%">Because, without it&hellip;</th><th>Cost of getting it wrong</th>
+  </tr>
+  <tr>
+    <td><strong>1</strong></td>
+    <td><span class="k-session">session_id</span></td>
+    <td>&hellip;the password would be sent on every single request</td>
+    <td>Guessable ids mean account takeover with no password</td>
+  </tr>
+  <tr>
+    <td><strong>2</strong></td>
+    <td colspan="2"><em>the realisation that sharing the password cannot be made safe</em></td>
+    <td>Every integration becomes a copy of your password</td>
+  </tr>
+  <tr>
+    <td><strong>3</strong></td>
+    <td><span class="k-token">access_token</span></td>
+    <td>&hellip;third parties would need the password to act for the user</td>
+    <td>Bearer: anyone holding it is the user</td>
+  </tr>
+  <tr>
+    <td><strong>3</strong></td>
+    <td><span class="k-client">redirect_uri</span> (registered)</td>
+    <td>&hellip;an attacker names their own server and the provider posts the token to it</td>
+    <td>Loose matching has repeatedly become token theft</td>
+  </tr>
+  <tr>
+    <td><strong>4</strong></td>
+    <td><span class="k-client">client_id</span></td>
+    <td>&hellip;the provider cannot tell which registration to enforce</td>
+    <td>Public by design; grants nothing alone</td>
+  </tr>
+  <tr>
+    <td><strong>4</strong></td>
+    <td><span class="k-pkce">state</span></td>
+    <td>&hellip;a client accepts a callback it never initiated (login CSRF)</td>
+    <td>The victim's session silently binds to the attacker's account</td>
+  </tr>
+  <tr>
+    <td><strong>5</strong></td>
+    <td><span class="k-pkce">authorization code</span></td>
+    <td>&hellip;the token itself has to travel through the address bar</td>
+    <td>Must be single-use and short-lived, or replay works</td>
+  </tr>
+  <tr>
+    <td><strong>5</strong></td>
+    <td><span class="k-client">client_secret</span></td>
+    <td>&hellip;anyone holding a stolen code could redeem it</td>
+    <td>Impossible to keep in a browser or mobile app</td>
+  </tr>
+  <tr>
+    <td><strong>6</strong></td>
+    <td><span class="k-pkce">code_verifier</span> / <span class="k-pkce">code_challenge</span></td>
+    <td>&hellip;public clients have no way to prove the code is theirs</td>
+    <td>Skipping it on a public client means a stolen code is a full takeover</td>
+  </tr>
+  <tr>
+    <td><strong>7</strong></td>
+    <td><span class="k-token">id_token</span></td>
+    <td>&hellip;the client has no verifiable statement of <em>who</em> logged in, only a key to an API</td>
+    <td>Using an access token as proof of login enables token substitution</td>
+  </tr>
+  <tr>
+    <td><strong>7</strong></td>
+    <td><span class="k-pkce">nonce</span></td>
+    <td>&hellip;a captured id_token can be injected into someone else's in-flight login</td>
+    <td>Client accepts an identity assertion minted for a different session</td>
+  </tr>
+</table>
+
+<h2>10. Mapping it onto Cerberus and Synapse</h2>
+
+<p>
+Everything above is generic. Here is where each concept actually lives in your system.
+</p>
+
+<table>
+  <tr><th style="width:26%">Concept</th><th>In your codebase</th></tr>
+  <tr><td><span class="k-cred">password</span></td><td>Typed only into the Angular app on <code>:4200</code>, posted to <code>/User/login</code>, verified with BCrypt. Neither Synapse app ever receives it.</td></tr>
+  <tr><td><span class="k-client">client_id</span></td><td><code>synapse-spa</code>, registered via <code>POST /OAuth/clients</code>, stored in the <code>Client</code> table.</td></tr>
+  <tr><td><span class="k-client">client_secret</span></td><td>Deliberately <strong>empty</strong>. That is what marks the client public: <code>string.IsNullOrEmpty(client.ClientSecret)</code> selects the PKCE path.</td></tr>
+  <tr><td><span class="k-client">redirect_uri</span></td><td><code>http://localhost:5173/auth/callback</code>, compared with an exact ordinal match at both the authorize and token steps.</td></tr>
+  <tr><td><span class="k-pkce">state</span></td><td>Generated in <code>pkce.ts</code>, held in <code>sessionStorage</code>, checked in <code>exchangeCodeForTokens</code> before the code is redeemed.</td></tr>
+  <tr><td><span class="k-pkce">code_verifier</span> / <span class="k-pkce">code_challenge</span></td><td>Created in <code>pkce.ts</code> with <code>crypto.getRandomValues</code>; verified server-side in <code>Pkce.Verify</code>.</td></tr>
+  <tr><td><span class="k-pkce">authorization code</span></td><td>Cached in Redis as <code>auth_code_{code}</code> with the challenge and redirect uri beside it, and deleted on redemption.</td></tr>
+  <tr><td><span class="k-token">access_token</span></td><td>RS256 JWT, 15 minutes, validated by the Synapse API against the JWKS at <code>/.well-known/jwks.json</code>.</td></tr>
+  <tr><td><span class="k-session">session</span></td><td>No server session for the SPA. The token <em>is</em> the session, which is why its short lifetime matters.</td></tr>
+  <tr>
+    <td><span class="k-token">id_token</span> / <span class="k-pkce">nonce</span></td>
+    <td><strong>Not implemented.</strong> Cerberus serves an OIDC-shaped discovery document and a JWKS, but issues only an OAuth access token &mdash; there is no id_token and no nonce support. Stage 7 is therefore the part of this document your system has not reached yet.</td>
+  </tr>
+</table>
+
+<h3>One thing your system adds that the generic story does not have</h3>
+
+<p>
+Cerberus does not hand the OAuth parameters to its login page. It caches the whole
+authorization request server-side and redirects the browser with only an opaque
+<code>requestId</code>. The login page echoes that back and the server reconstitutes the
+request.
+</p>
+
+<p>
+Read through the lens of this document, that is another application of Idea 1: the login
+page is given the least powerful thing that still does the job. It cannot alter the
+<span class="k-client">redirect_uri</span> or the
+<span class="k-pkce">code_challenge</span>, because it never holds them &mdash; so even a
+fully compromised login page cannot redirect the resulting code somewhere else.
+</p>
+
+<div class="callout">
+  <span class="label">Where to go next</span>
+  <p>
+  Two threads continue from here. <strong>Refresh tokens</strong>, and why they must
+  rotate &mdash; a long-lived amber value is exactly the thing the whole ladder has been
+  trying to avoid leaving lying around. And the <strong>backend-for-frontend</strong>
+  pattern, which moves the code exchange server-side and puts the token in an
+  <code>HttpOnly</code> cookie; that is the answer to the one weakness this design still
+  has, namely a bearer token sitting in <code>localStorage</code> where any script on the
+  origin can read it.
+  </p>
+</div>
+
+<!-- Regenerate: npm i mermaid && chrome --headless --print-to-pdf. CDN here so this
+     also opens standalone in a browser. -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      darkMode: false,
+      background: '#ffffff',
+      mainBkg: '#dbeafe', nodeBorder: '#2563eb', nodeTextColor: '#0f172a',
+      titleColor: '#0f172a', textColor: '#0f172a', edgeLabelBackground: '#ffffff',
+      clusterBkg: '#f8fafc', clusterBorder: '#94a3b8',
+      fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+      fontSize: '13px',
+      primaryColor: '#dbeafe', primaryTextColor: '#0f172a', primaryBorderColor: '#2563eb',
+      lineColor: '#475569',
+      secondaryColor: '#e0f2fe', secondaryTextColor: '#0f172a', secondaryBorderColor: '#0369a1',
+      tertiaryColor: '#f1f5f9', tertiaryTextColor: '#0f172a', tertiaryBorderColor: '#94a3b8',
+      noteBkgColor: '#fffbeb', noteTextColor: '#78350f', noteBorderColor: '#d97706',
+      actorBkg: '#dbeafe', actorBorder: '#2563eb', actorTextColor: '#0f172a',
+      actorLineColor: '#94a3b8',
+      signalColor: '#334155', signalTextColor: '#1a1d23',
+      labelBoxBkgColor: '#e0f2fe', labelBoxBorderColor: '#0369a1', labelTextColor: '#0f172a',
+      loopTextColor: '#0f172a', altBackground: '#f8fafc', sequenceNumberColor: '#ffffff'
+    },
+    sequence: { useMaxWidth: true, wrap: false, actorFontWeight: 600, noteAlign: 'left', messageAlign: 'center' },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+  });
+
+  /*
+   * Colour the values by audience, after rendering.
+   *
+   * Mermaid puts each <br/>-separated line of a message into its own <tspan>, so each line
+   * can be recoloured independently. That is why every diagram above puts one value per
+   * line - it makes per-value colouring possible without patching mermaid itself.
+   */
+  const GROUPS = [
+    { re: /\b(password|passphrase|TOTP|6-digit)\b/i,                         color: '#b91c1c' },
+    { re: /\b(session_id|session cookie|Set-Cookie|Cookie:)/i,               color: '#047857' },
+    { re: /\b(client_id|client_secret|redirect_uri)\b/i,                     color: '#6d28d9' },
+    { re: /\b(access_token|refresh_token|id_token|Bearer)\b/i,               color: '#b45309' },
+    { re: /(code_verifier|code_challenge|code_challenge_method|\bnonce\b|\bstate\b\s*=|\bcode\s*=|authorization code|response_type=code)/i, color: '#1d4ed8' }
+  ];
+
+  function tint(el) {
+    const text = (el.textContent || '').trim();
+    if (!text) return;
+    for (const g of GROUPS) {
+      if (g.re.test(text)) {
+        el.setAttribute('fill', g.color);
+        el.style.fill = g.color;
+        el.style.fontWeight = '600';
+        return;
+      }
+    }
+  }
+
+  window.renderComplete = false;
+  mermaid.run({ querySelector: '.mermaid' }).then(() => {
+    document.querySelectorAll('.diagram svg').forEach((svg) => {
+      svg.querySelectorAll('text').forEach((t) => {
+        const spans = t.querySelectorAll('tspan');
+        if (spans.length) spans.forEach(tint);
+        else tint(t);
+      });
+    });
+    window.renderComplete = true;
+    document.title = 'READY ' + document.title;
+  }).catch((e) => { window.renderError = String(e); window.renderComplete = true; });
+</script>
+
+</body>
+</html>

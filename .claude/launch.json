@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "synapse-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "SyanpseApplication_FrontEnd/synapse_app",
+      "port": 5173
+    }
+  ]
+}

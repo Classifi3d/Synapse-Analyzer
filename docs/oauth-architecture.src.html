@@ -1,0 +1,1514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Synapse Analyzer &mdash; OAuth &amp; Authentication Architecture</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+
+  /* Wide diagrams get their own landscape page. A sequence diagram's legible text
+     size is governed by column width divided by diagram width -- enlarging the font
+     just grows the diagram proportionally -- so the only real remedy is more page. */
+  @page wide { size: A4 landscape; margin: 10mm 12mm; }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.55;
+    color: #1a1d23;
+    margin: 0;
+  }
+
+  h1, h2, h3, h4 { color: #0f172a; line-height: 1.25; }
+  h1 { font-size: 25pt; margin: 0 0 6pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 15pt; margin: 26pt 0 9pt; padding-bottom: 5pt;
+    border-bottom: 2px solid #2563eb; break-after: avoid; page-break-after: avoid;
+  }
+  h3 { font-size: 11.8pt; margin: 17pt 0 6pt; break-after: avoid; page-break-after: avoid; }
+  h4 { font-size: 10.4pt; margin: 12pt 0 4pt; color: #334155; break-after: avoid; }
+
+  p { margin: 0 0 8pt; }
+  ul, ol { margin: 0 0 9pt; padding-left: 17pt; }
+  li { margin-bottom: 3.5pt; }
+
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.7pt; background: #eef2f7; padding: 1px 4px;
+    border-radius: 3px; color: #0b3d91; word-break: break-word;
+  }
+
+  pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.1pt; line-height: 1.45; background: #0f172a; color: #e2e8f0;
+    padding: 9pt 11pt; border-radius: 5px; overflow-x: auto;
+    white-space: pre-wrap; word-break: break-word;
+    break-inside: avoid; page-break-inside: avoid; margin: 0 0 10pt;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  /* Diagrams are authored inside <pre class="mermaid">, so without this they
+     inherit the dark code-block styling above and every rendered figure ends up
+     framed in near-black. */
+  pre.mermaid {
+    background: none; color: inherit; padding: 0; border-radius: 0;
+    margin: 0; white-space: normal;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: 8.9pt; margin: 0 0 11pt;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  th, td { border: 1px solid #cbd5e1; padding: 4.5pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; font-weight: 600; color: #0f172a; }
+  td code { font-size: 8.2pt; }
+
+  .cover {
+    border-bottom: 3px solid #2563eb; padding-bottom: 14pt; margin-bottom: 16pt;
+  }
+  .subtitle { font-size: 12pt; color: #475569; margin: 0 0 10pt; }
+  .meta { font-size: 8.8pt; color: #64748b; }
+
+  .callout {
+    border-left: 3px solid #2563eb; background: #f1f5f9;
+    padding: 8pt 11pt; margin: 0 0 11pt; border-radius: 0 4px 4px 0;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .callout.warn { border-left-color: #d97706; background: #fffbeb; }
+  .callout.bug  { border-left-color: #dc2626; background: #fef2f2; }
+  .callout.ok   { border-left-color: #059669; background: #ecfdf5; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    display: block; font-size: 7.8pt; font-weight: 700; letter-spacing: 0.6pt;
+    text-transform: uppercase; margin-bottom: 3pt; color: #2563eb;
+  }
+  .callout.warn .label { color: #b45309; }
+  .callout.bug  .label { color: #b91c1c; }
+  .callout.ok   .label { color: #047857; }
+
+  .diagram {
+    text-align: center; margin: 12pt 0 14pt;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  /* max-height keeps a tall diagram inside one page; width:auto preserves the
+     aspect ratio while it scales down. */
+  .diagram svg { max-width: 100%; max-height: 232mm; width: auto; height: auto; }
+  /* Belt and braces: mermaid injects "#mermaid-N { background-color: ... }" from its
+     `background` theme variable. Force it white so a theme change can never darken
+     the printed canvas again. */
+  .diagram svg { background-color: #ffffff !important; }
+
+  .diagram-wide {
+    page: wide;
+    margin: 0;
+    break-before: page; page-break-before: always;
+    break-after: page;  page-break-after: always;
+  }
+  .diagram-wide svg { max-height: 162mm; }
+  .caption {
+    font-size: 8.4pt; color: #64748b; font-style: italic;
+    margin-top: 5pt; text-align: center;
+  }
+
+  .page-break { break-before: page; page-break-before: always; }
+
+  .toc { font-size: 9.6pt; }
+  .toc ol { padding-left: 20pt; }
+  .toc > ol > li { margin-bottom: 4pt; font-weight: 600; }
+  .toc ol ol { padding-left: 15pt; margin-top: 3pt; }
+  .toc ol ol li { font-weight: 400; margin-bottom: 1.5pt; color: #475569; }
+
+  .tag {
+    display: inline-block; font-size: 7.6pt; font-weight: 700; padding: 1.5pt 5pt;
+    border-radius: 3px; vertical-align: middle; letter-spacing: 0.3pt;
+  }
+  .tag-fixed { background: #dcfce7; color: #166534; }
+  .tag-new   { background: #dbeafe; color: #1e40af; }
+
+  .small { font-size: 8.8pt; color: #475569; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Synapse Analyzer</h1>
+  <p class="subtitle">OAuth&nbsp;2.0, Cerberus SSO integration &amp; authentication architecture</p>
+  <p class="meta">
+    Technical analysis &mdash; covering the authorization code flow with PKCE, the
+    Cerberus endpoint changes, the OpenID discovery surface, browser-side authentication,
+    and cross-origin configuration across both applications.
+  </p>
+</div>
+
+<div class="toc">
+<strong style="font-size:11pt;">Contents</strong>
+<ol>
+  <li>System context and the trust relationship</li>
+  <li>Why authorization code + PKCE
+    <ol>
+      <li>Public versus confidential clients</li>
+      <li>What PKCE actually defends against</li>
+    </ol>
+  </li>
+  <li>State of the implementation before the changes</li>
+  <li>The complete end-to-end flow</li>
+  <li>Endpoint-by-endpoint changes
+    <ol>
+      <li>Parameter binding at the controller</li>
+      <li>The authorize endpoint</li>
+      <li>The token endpoint</li>
+      <li>Client registration</li>
+      <li>The login and MFA endpoints</li>
+    </ol>
+  </li>
+  <li>The WellKnownController and token validation</li>
+  <li>Browser-side authentication in the React client</li>
+  <li>The Angular application as authorization UI</li>
+  <li>Cross-origin resource sharing</li>
+  <li>Other logic worth noting</li>
+  <li>Security posture and remaining gaps</li>
+  <li>Configuration reference</li>
+</ol>
+</div>
+
+<div class="page-break"></div>
+
+<h2>1. System context and the trust relationship</h2>
+
+<p>
+Four independently deployable pieces participate in authentication. Understanding which
+one holds which secret &mdash; and which one is merely a courier &mdash; is the key to
+everything that follows.
+</p>
+
+<table>
+  <tr><th>Component</th><th>Port</th><th>Role in authentication</th></tr>
+  <tr>
+    <td><strong>Synapse client</strong><br><span class="small">React SPA</span></td>
+    <td>5173</td>
+    <td>The <em>relying party</em>. Starts the flow, holds the PKCE verifier, exchanges the code, stores the token. Holds no secret.</td>
+  </tr>
+  <tr>
+    <td><strong>Synapse API</strong><br><span class="small">ASP.NET Core</span></td>
+    <td>5056</td>
+    <td>The <em>resource server</em>. Validates tokens; never issues them and never sees a credential.</td>
+  </tr>
+  <tr>
+    <td><strong>Cerberus API</strong><br><span class="small">ASP.NET Core</span></td>
+    <td>5211</td>
+    <td>The <em>authorization server</em>. Owns users, issues codes and tokens, publishes the signing key.</td>
+  </tr>
+  <tr>
+    <td><strong>Cerberus web app</strong><br><span class="small">Angular</span></td>
+    <td>4200</td>
+    <td>The <em>authorization UI</em>. The only place a password is ever typed.</td>
+  </tr>
+</table>
+
+<p>
+The property that makes this SSO rather than a shared login page is that
+<strong>the Synapse client never sees the user's credentials</strong>. It hands the
+browser to Cerberus, and Cerberus hands back a short-lived, signed assertion. The
+Synapse API then verifies that assertion cryptographically without ever contacting the
+Synapse client, and without sharing a secret with Cerberus.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+graph TB
+    subgraph browser["User's browser"]
+        SPA["Synapse client<br/>:5173 &mdash; React"]
+        NG["Cerberus web app<br/>:4200 &mdash; Angular"]
+    end
+
+    subgraph servers["Server side"]
+        CERB["Cerberus API :5211<br/>authorization server"]
+        API["Synapse API :5056<br/>resource server"]
+        PG[("PostgreSQL<br/>users, clients")]
+        RD[("Redis<br/>codes, challenges")]
+    end
+
+    SPA -->|"1 . redirect to /OAuth/authorize"| CERB
+    CERB -->|"2 . 302 to /login?requestId"| NG
+    NG -->|"3 . POST credentials + requestId"| CERB
+    CERB -->|"4 . 302 back with code"| SPA
+    SPA -->|"5 . POST code + verifier"| CERB
+    CERB -->|"6 . access token"| SPA
+    SPA -->|"7 . Bearer token"| API
+    API -.->|"8 . fetch JWKS once, then cached"| CERB
+
+    CERB --- PG
+    CERB --- RD
+
+    classDef client fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#0f172a
+    classDef server fill:#e0f2fe,stroke:#0369a1,stroke-width:1.5px,color:#0f172a
+    classDef store fill:#f1f5f9,stroke:#64748b,stroke-width:1px,color:#0f172a
+    class SPA,NG client
+    class CERB,API server
+    class PG,RD store
+</pre>
+<div class="caption">Figure 1 &mdash; Component context. Step 8 is the trust anchor: the resource
+server validates tokens against the authorization server's published public key.</div>
+</div>
+
+<h2>2. Why authorization code + PKCE</h2>
+
+<h3>2.1 Public versus confidential clients</h3>
+
+<p>
+OAuth divides clients into two kinds, and the distinction drives every design decision
+here.
+</p>
+
+<ul>
+  <li>A <strong>confidential client</strong> runs on a server and can keep a
+  <code>client_secret</code>. It proves its identity at the token endpoint by presenting
+  that secret.</li>
+  <li>A <strong>public client</strong> runs where the user can read its code &mdash; a
+  browser SPA, a mobile app. It <em>cannot</em> keep a secret. Anything shipped to the
+  browser is readable by anyone who opens developer tools.</li>
+</ul>
+
+<p>
+The Synapse client is unambiguously a public client. This matters because the original
+Cerberus token endpoint <em>required</em> <code>client_secret</code> unconditionally,
+which meant a browser SPA could only complete the flow by embedding a secret in
+downloadable JavaScript. That is not a weaker configuration; it is the same as having no
+authentication on the token endpoint at all, because the "secret" is public.
+</p>
+
+<p>
+The implementation now decides which rule applies from <strong>how the client is
+registered</strong>, never from what the caller sends:
+</p>
+
+<pre><code>var isPublicClient = string.IsNullOrEmpty(client.ClientSecret);</code></pre>
+
+<div class="callout">
+  <span class="label">Design note</span>
+  <p>
+  Deriving the client type from server-side registration rather than from the request is
+  deliberate. If the branch were chosen by "did the caller send a secret?", an attacker
+  holding a stolen authorization code could simply omit the secret and take the
+  PKCE-only path, or omit the verifier and take the secret path &mdash; downgrading to
+  whichever check they could satisfy.
+  </p>
+</div>
+
+<h3>2.2 What PKCE actually defends against</h3>
+
+<p>
+Proof Key for Code Exchange (RFC&nbsp;7636) closes the <em>authorization code
+interception</em> attack. The authorization code travels back to the client through a
+browser redirect &mdash; through the URL bar, through browser history, potentially
+through a referrer header or a malicious app registered for the same redirect scheme. If
+possession of the code were sufficient to obtain a token, intercepting that redirect
+would be enough to impersonate the user.
+</p>
+
+<p>PKCE binds the code to the specific client instance that requested it:</p>
+
+<ol>
+  <li>Before redirecting, the client generates a high-entropy random
+  <strong>verifier</strong> and keeps it locally.</li>
+  <li>It sends only <code>SHA-256(verifier)</code> &mdash; the <strong>challenge</strong>
+  &mdash; with the authorization request.</li>
+  <li>Cerberus stores that challenge alongside the issued code.</li>
+  <li>At the token endpoint the client must present the original verifier. Cerberus
+  hashes it and compares.</li>
+</ol>
+
+<p>
+Because SHA-256 is one-way, an attacker who intercepts the redirect obtains the code and
+the challenge but cannot derive the verifier. The code alone is worthless.
+</p>
+
+<p>The implementation lives in <code>Application/CommandsAndQueries/Clients/Pkce.cs</code>:</p>
+
+<pre><code>public static bool Verify(string? codeVerifier, string? expectedChallenge)
+{
+    if (string.IsNullOrWhiteSpace(codeVerifier) ||
+        string.IsNullOrWhiteSpace(expectedChallenge))
+        return false;
+
+    // RFC 7636 section 4.1
+    if (codeVerifier.Length is &lt; 43 or &gt; 128)
+        return false;
+
+    var actual = ComputeChallenge(codeVerifier);
+
+    return CryptographicOperations.FixedTimeEquals(
+        Encoding.ASCII.GetBytes(actual),
+        Encoding.ASCII.GetBytes(expectedChallenge));
+}</code></pre>
+
+<p>Three details are load-bearing:</p>
+
+<ul>
+  <li><strong>The length bounds are a security check, not validation politeness.</strong>
+  RFC&nbsp;7636 mandates 43&ndash;128 characters. Accepting a three-character verifier
+  would make the challenge brute-forceable and silently defeat the mechanism.</li>
+  <li><strong>Fixed-time comparison.</strong> The challenge is a secret-derived value. An
+  ordinary string comparison returns early on the first differing byte, and the timing
+  difference leaks the expected value one byte at a time.</li>
+  <li><strong>Only <code>S256</code> is accepted.</strong> The spec also permits
+  <code>plain</code>, where the challenge <em>is</em> the verifier &mdash; which offers no
+  protection at all against an attacker who intercepted the authorization request. The
+  authorize endpoint rejects any other method.</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2>3. State of the implementation before the changes</h2>
+
+<p>
+The flow could not complete. Not "was insecure" &mdash; could not complete. Six
+independent defects each individually blocked it; they are listed in the order a request
+would encounter them.
+</p>
+
+<table>
+  <tr><th>#</th><th>Defect</th><th>Effect</th></tr>
+  <tr>
+    <td>1</td>
+    <td>OAuth sends <code>client_id</code>, <code>response_type</code>, <code>code_challenge</code>; ASP.NET model binding matches on <em>property name</em> (<code>ClientId</code>, <code>ResponseType</code>).</td>
+    <td>The DTO arrived entirely empty. Every authorization failed at the first check with <em>"Unsupported response_type"</em>, regardless of what was sent.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>No <code>Client</code> table. The entity existed in the EF model but no migration ever created it.</td>
+    <td>No OAuth client could be registered, so no client could ever be valid.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><code>/OAuth/authorize</code> redirected to the relative path <code>/api/auth/login?requestId=…</code>.</td>
+    <td>Resolved against the API's own origin, where no such route exists. The flow died at its first redirect with a 404.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>PKCE was accepted from the client but never implemented server-side. No <code>code_challenge</code> field existed on the request DTO and no <code>code_verifier</code> on the token DTO.</td>
+    <td>PKCE parameters were silently discarded. The token endpoint required a <code>client_secret</code> a browser cannot hold.</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><code>/User/login</code> computed the OAuth redirect but the controller returned only <code>new { token = loginResult.Token }</code>.</td>
+    <td>The authorization code was discarded server-side. The caller received <code>{"token":null}</code> and the flow stalled with no error.</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td><code>TokenService</code> called <code>RSA.Create(2048)</code> inside its constructor, and the service was registered <code>Scoped</code>.</td>
+    <td>A brand-new signing keypair per HTTP request. Tokens were unverifiable by anyone &mdash; including Cerberus itself. No JWKS endpoint existed either.</td>
+  </tr>
+</table>
+
+<div class="callout bug">
+  <span class="label">Root cause worth dwelling on</span>
+  <p>
+  Defect&nbsp;1 is the most instructive. <code>[FromQuery]</code> on a complex type binds
+  each property by matching the query-string key to the <em>property name</em>,
+  case-insensitively. <code>client_id</code> does not match <code>ClientId</code> &mdash;
+  the underscore makes them different identifiers. Binding silently produced a
+  default-initialised object rather than raising an error, so the failure surfaced as a
+  misleading <em>"Unsupported response_type"</em> message that pointed at the wrong
+  parameter entirely.
+  </p>
+</div>
+
+<h2>4. The complete end-to-end flow</h2>
+
+<p>
+The diagram below is the whole system: browser redirects, the credential exchange, the
+PKCE round trip, and the subsequent validation of the resulting token by a service that
+never spoke to the client. Dotted arrows are browser redirects; solid arrows are direct
+HTTP calls.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant S as Synapse SPA<br/>:5173
+    participant C as Cerberus API<br/>:5211
+    participant R as Redis
+    participant N as Angular UI<br/>:4200
+
+    U->>S: Click "Sign in with Cerberus"
+    Note over S: verifier = 128 random chars<br/>challenge = BASE64URL(SHA256(verifier))<br/>state = 32 random chars
+    S->>S: sessionStorage: verifier, state, returnTo
+
+    S-->>C: GET /OAuth/authorize<br/>client_id, redirect_uri, response_type=code,<br/>state, code_challenge, code_challenge_method=S256
+
+    Note over C: client exists?<br/>redirect_uri matches registration?<br/>public client sent a challenge?<br/>method is S256?
+    C->>R: cache oauth_request_{requestId}, 5 min
+    C-->>N: 302 to /login?requestId=...
+
+    U->>N: enters email + password
+    N->>C: POST /User/login<br/>{ email, password, requestId }
+
+    Note over C: verify password (BCrypt)
+    C->>R: read oauth_request_{requestId}
+    C->>R: cache auth_code_{code}<br/>{ userId, clientId, codeChallenge, redirectUri }
+    C-->>N: 200 { redirectUrl }
+
+    N-->>S: window.location = redirectUrl<br/>/auth/callback?code=..&state=..
+</pre>
+<div class="caption">Figure 2a &mdash; Phase one: authorization request and credential collection.
+The SPA never sees the password; the Angular UI never sees the OAuth parameters.</div>
+</div>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant S as Synapse SPA<br/>:5173
+    participant C as Cerberus API<br/>:5211
+    participant R as Redis
+    participant A as Synapse API<br/>:5056
+
+    Note over S: compare returned state<br/>with the stored state,<br/>abort if they differ
+
+    S->>C: POST /OAuth/token (form-encoded)<br/>grant_type, code, redirect_uri,<br/>client_id, code_verifier
+
+    C->>R: read auth_code_{code}
+    Note over C: client id matches?<br/>SHA256(verifier) == stored challenge?<br/>redirect_uri == the one authorized?
+    C->>R: delete auth_code_{code}
+    C-->>S: 200 { access_token, refresh_token,<br/>token_type, expires_in }
+
+    S->>S: store token, decode claims,<br/>clear the verifier
+
+    S->>A: GET /api/analysis<br/>Authorization: Bearer eyJ...
+
+    A->>C: GET /.well-known/openid-configuration
+    A->>C: GET /.well-known/jwks.json
+    Note over A: verify RS256 signature with the JWKS key<br/>iss == Jwt:Authority<br/>aud == Jwt:Audience<br/>not expired
+    A-->>S: 200 []
+</pre>
+<div class="caption">Figure 2b &mdash; Phase two: PKCE-protected code exchange, then resource access.
+The discovery and JWKS fetches happen once and are cached thereafter.</div>
+</div>
+
+<div class="callout">
+  <span class="label">Note on step 13</span>
+  <p>
+  The <code>requestId</code> is the hinge of the whole design. Cerberus caches the
+  pending authorization request server-side and hands the browser only an opaque
+  identifier. The Angular UI therefore never needs to understand, carry or re-transmit
+  OAuth parameters &mdash; it echoes one opaque string back, and the server reconstitutes
+  the full request. This keeps <code>redirect_uri</code> and
+  <code>code_challenge</code> out of reach of the login page entirely, so a compromised
+  login page cannot alter where the code is delivered.
+  </p>
+</div>
+
+<h3>The MFA branch</h3>
+
+<p>
+When the account has MFA enabled the flow forks after password verification. The pending
+authorization request survives the detour because the <code>requestId</code> is stored
+<em>with the challenge</em>, server-side &mdash; the browser never has to hold it.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant N as Angular UI
+    participant C as Cerberus API
+    participant R as Redis
+    participant S as Synapse SPA
+
+    N->>C: POST /User/login { email, password, requestId }
+    Note over C: password valid, but IsMfaEnabled == true
+    C->>R: cache mfa_challenge_{challengeId}<br/>{ userId, requestId }
+    C-->>N: 200 { challengeId }
+
+    N->>N: store challengeId, route to /multi-factor-auth
+    N->>C: POST /User/verify-mfa { challengeId, code }
+
+    Note over C: validate 6-digit TOTP
+    C->>R: read mfa_challenge → recover requestId
+    C->>R: read oauth_request_{requestId}
+    C->>R: cache auth_code_{code} with challenge + redirect uri
+    C-->>N: 200 { redirectUrl }
+
+    N-->>S: window.location = redirectUrl
+    Note over S: identical from here on &mdash;<br/>state check, then code + verifier exchange
+</pre>
+<div class="caption">Figure 3 &mdash; The MFA detour. The OAuth context is carried entirely in
+server-side cache, keyed by the challenge.</div>
+</div>
+
+<div class="page-break"></div>
+
+<h2>5. Endpoint-by-endpoint changes</h2>
+
+<h3>5.1 Parameter binding at the controller <span class="tag tag-fixed">FIXED</span></h3>
+
+<p>
+Rather than decorating the application-layer DTOs with MVC attributes &mdash; which would
+have dragged <code>Microsoft.AspNetCore.Mvc</code> into a layer that deliberately depends
+only on <code>Domain</code> &mdash; each OAuth parameter is now bound explicitly at the
+controller and mapped into the DTO there.
+</p>
+
+<pre><code>public async Task&lt;IActionResult&gt; AuthorizeClientAsync(
+    [FromQuery(Name = "client_id")]             string? clientId,
+    [FromQuery(Name = "redirect_uri")]          string? redirectUri,
+    [FromQuery(Name = "response_type")]         string? responseType,
+    [FromQuery(Name = "state")]                 string? state,
+    [FromQuery(Name = "scope")]                 string? scope,
+    [FromQuery(Name = "code_challenge")]        string? codeChallenge,
+    [FromQuery(Name = "code_challenge_method")] string? codeChallengeMethod,
+    CancellationToken cancellationToken = default)</code></pre>
+
+<p>
+This has a secondary benefit beyond correctness: the OAuth wire contract is now visible
+at the endpoint signature. A reader can see exactly which spec parameters are supported
+without tracing through to a DTO in another project.
+</p>
+
+<p>
+The token endpoint received the same treatment with <code>[FromForm(Name = …)]</code>,
+plus an explicit <code>[Consumes("application/x-www-form-urlencoded")]</code>.
+RFC&nbsp;6749 requires the token endpoint to accept form encoding, not JSON.
+</p>
+
+<h3>5.2 The authorize endpoint <span class="tag tag-fixed">FIXED</span></h3>
+
+<p>Three changes, in <code>AuthorizeClientCommandHandler</code>.</p>
+
+<h4>PKCE is now mandatory for public clients</h4>
+
+<pre><code>var isPublicClient = string.IsNullOrEmpty(client.ClientSecret);
+
+if (isPublicClient &amp;&amp; string.IsNullOrWhiteSpace(authRequest.CodeChallenge))
+{
+    return Result.Failure&lt;AuthorizeClientResultDTO&gt;(
+        "code_challenge is required for public clients");
+}
+
+if (!string.IsNullOrWhiteSpace(authRequest.CodeChallenge) &amp;&amp;
+    !string.Equals(authRequest.CodeChallengeMethod, Pkce.S256, StringComparison.Ordinal))
+{
+    return Result.Failure&lt;AuthorizeClientResultDTO&gt;(
+        "Unsupported code_challenge_method; only S256 is accepted");
+}</code></pre>
+
+<p>
+Enforcing this at <em>authorize</em> time rather than only at token time is the important
+part. If a public client were permitted to start a flow without a challenge, the code it
+receives would be bearer-equivalent &mdash; anyone intercepting the redirect could redeem
+it. Rejecting the request up front means no such code is ever minted.
+</p>
+
+<h4>The redirect is absolute and points at the login UI</h4>
+
+<pre><code>var separator = _settings.LoginUrl.Contains('?') ? '&amp;' : '?';
+var redirectUrl = $"{_settings.LoginUrl}{separator}requestId={requestId}";</code></pre>
+
+<p>
+<code>LoginUrl</code> comes from configuration (<code>OAuth:LoginUrl</code>) through a new
+<code>IOAuthSettings</code> abstraction. The application layer has no reference to
+<code>Microsoft.Extensions.Configuration</code>, so the interface is declared in
+<code>Application/Abstraction/Services</code> and implemented in
+<code>Infrastructure/Services/OAuthSettings.cs</code>, which reads configuration and fails
+fast at construction with an actionable message if it is missing.
+</p>
+
+<h3>5.3 The token endpoint <span class="tag tag-fixed">FIXED</span></h3>
+
+<p>This handler changed the most. Four distinct issues.</p>
+
+<h4>A runtime bug in cache deserialisation</h4>
+
+<pre><code>// before
+var cached = await _cacheService.GetAsync&lt;dynamic&gt;($"auth_code_{req.Code}");
+if (cached.ClientId != req.ClientId) { ... }</code></pre>
+
+<p>
+<code>CacheService</code> deserialises with <code>System.Text.Json</code>, so
+<code>dynamic</code> resolves to a <code>JsonElement</code>. A <code>JsonElement</code>
+has no <code>ClientId</code> member, so this line throws
+<code>RuntimeBinderException</code> at runtime rather than reading the stored value.
+Replaced with the concrete <code>AuthorizationCodeDTO</code>.
+</p>
+
+<h4>Branching on registration, verifying PKCE</h4>
+
+<pre><code>if (isPublicClient)
+{
+    if (!Pkce.Verify(req.CodeVerifier, cached.CodeChallenge))
+        return Result.Failure&lt;TokenResponseDTO&gt;("Invalid code_verifier");
+}
+else
+{
+    if (!_securityService.CheckSecret(req.ClientSecret ?? string.Empty, client.ClientSecret))
+        return Result.Failure&lt;TokenResponseDTO&gt;("Invalid client credentials");
+
+    // Confidential clients may still use PKCE; honour a registered challenge.
+    if (!string.IsNullOrWhiteSpace(cached.CodeChallenge) &amp;&amp;
+        !Pkce.Verify(req.CodeVerifier, cached.CodeChallenge))
+        return Result.Failure&lt;TokenResponseDTO&gt;("Invalid code_verifier");
+}</code></pre>
+
+<h4>redirect_uri is re-validated</h4>
+
+<p>
+RFC&nbsp;6749 §4.1.3 requires the <code>redirect_uri</code> presented at the token
+endpoint to match the one the code was issued for. The value is compared against the copy
+<em>stored with the code</em>, not against anything the caller resends:
+</p>
+
+<pre><code>if (!string.IsNullOrWhiteSpace(cached.RedirectUri) &amp;&amp;
+    !string.Equals(cached.RedirectUri, req.RedirectUri, StringComparison.Ordinal))
+{
+    return Result.Failure&lt;TokenResponseDTO&gt;(
+        "redirect_uri does not match the authorization request");
+}</code></pre>
+
+<h4>Richer claims</h4>
+
+<p>
+The handler now loads the user and passes name and email into token generation, so a
+relying party can render "signed in as…" without a second round trip to the user
+endpoint.
+</p>
+
+<h3>5.4 Client registration <span class="tag tag-fixed">FIXED</span></h3>
+
+<p>
+Public clients are registered by supplying no secret. The original code hashed whatever
+it was given, and <code>HashSecret("")</code> produces a perfectly valid BCrypt hash
+&mdash; so an empty secret produced a client that <em>looked</em> confidential and was
+then required to present a secret it had never been issued.
+</p>
+
+<pre><code>ClientSecret = string.IsNullOrWhiteSpace(requestedClient.ClientSecret)
+    ? string.Empty
+    : _securityService.HashSecret(requestedClient.ClientSecret),</code></pre>
+
+<p>Registering the Synapse client:</p>
+
+<pre><code>curl -X POST http://localhost:5211/OAuth/clients \
+  -H 'Content-Type: application/json' \
+  -d '{"clientId":"synapse-spa","clientSecret":"",
+       "redirectUri":"http://localhost:5173/auth/callback",
+       "allowedScopes":"openid profile email"}'</code></pre>
+
+<div class="callout warn">
+  <span class="label">Operational note</span>
+  <p>
+  <code>redirectUri</code> is compared with an exact ordinal string match, both at
+  authorize and at token time. A trailing slash, a different port, or
+  <code>127.0.0.1</code> instead of <code>localhost</code> will be rejected. This
+  strictness is correct &mdash; loose redirect matching is a classic open-redirect and
+  token-theft vector &mdash; but it is the most common source of setup friction.
+  </p>
+</div>
+
+<h3>5.5 The login and MFA endpoints <span class="tag tag-fixed">FIXED</span></h3>
+
+<p>
+Both endpoints computed the OAuth redirect correctly and then threw it away at the
+controller. <code>/User/login</code> returned only the token field:
+</p>
+
+<pre><code>// before: an OAuth login returned {"token": null}
+return Ok(new { token = loginResult.Token });
+
+// after
+if (!string.IsNullOrEmpty(loginResult.RedirectUrl))
+    return Ok(new { redirectUrl = loginResult.RedirectUrl });
+
+return Ok(new { token = loginResult.Token });</code></pre>
+
+<p>
+<code>/User/verify-mfa</code> had a related but distinct problem: it returned
+<code>Ok(result)</code> &mdash; the <code>Result&lt;LoginSecurityDTO&gt;</code> wrapper
+itself. Callers received <code>{ value, isSuccess, isFailure, error }</code> instead of
+the payload, inconsistent with every other endpoint. It now mirrors the login shape.
+</p>
+
+<div class="page-break"></div>
+
+<h2>6. The WellKnownController and token validation</h2>
+
+<h3>What discovery is for</h3>
+
+<p>
+The Synapse API must decide whether a token it has never seen, issued by a service it
+does not share a secret with, is genuine. With RS256 that is done by signature
+verification: Cerberus signs with a private key nobody else holds, and any party can
+verify with the corresponding public key.
+</p>
+
+<p>
+That leaves one problem &mdash; <em>how does the resource server obtain the public key,
+and how does it know which key signed a given token when keys rotate?</em> OpenID Connect
+Discovery answers this with two well-known endpoints, which is precisely what
+<code>WellKnownController</code> provides.
+</p>
+
+<table>
+  <tr><th>Endpoint</th><th>Purpose</th></tr>
+  <tr>
+    <td><code>/.well-known/openid-configuration</code></td>
+    <td>Metadata document. Declares the issuer, the endpoint URLs, supported grant types and challenge methods, and &mdash; critically &mdash; <code>jwks_uri</code>.</td>
+  </tr>
+  <tr>
+    <td><code>/.well-known/jwks.json</code></td>
+    <td>The JSON Web Key Set: the public half of the signing key, with a <code>kid</code> identifying it.</td>
+  </tr>
+</table>
+
+<p>
+Configuring the resource server is then a single setting. <code>AddJwtBearer</code> takes
+<code>Authority</code>, fetches the discovery document, follows <code>jwks_uri</code>,
+caches the keys, and validates every token against them:
+</p>
+
+<pre><code>"Jwt": {
+  "Authority": "http://localhost:5211",
+  "Audience":  "synapse-spa"
+}</code></pre>
+
+<div class="callout">
+  <span class="label">Why Audience is the client id</span>
+  <p>
+  Cerberus sets <code>audience: clientId</code> when building the token. The
+  <code>aud</code> claim answers "who is this token <em>for</em>", and here it identifies
+  the client the user authorized. So the Synapse API's <code>Jwt:Audience</code> must be
+  <code>synapse-spa</code> &mdash; the client id &mdash; not a name for the API itself.
+  This is a genuine point of confusion and was the cause of a real failure during
+  integration: <code>appsettings.Development.json</code> was overriding it back to
+  <code>synapse-api</code>, producing
+  <em>"The audience 'synapse-spa' is invalid"</em>.
+  </p>
+</div>
+
+<h3>The signing key</h3>
+
+<p>
+The discovery endpoints are only useful if the key is stable. The original
+<code>TokenService</code> generated a fresh keypair in its constructor and was registered
+<code>Scoped</code> &mdash; a new key per HTTP request. Every token was signed by a key
+that ceased to exist the moment the request completed.
+</p>
+
+<p>Key resolution now follows a three-step precedence, and the service is a singleton:</p>
+
+<ol>
+  <li><code>JWT:PrivateKeyPem</code> from configuration, for real deployments.</li>
+  <li>A PEM file at <code>JWT:SigningKeyPath</code>, if it exists.</li>
+  <li>Otherwise generate one <em>and persist it</em>, logging a warning. A fresh checkout
+  works with no setup, and still survives a restart.</li>
+</ol>
+
+<pre><code>// Singleton, not scoped: the service owns the signing key, and resolving a new
+// one per request is what produced a fresh keypair on every call.
+services.AddSingleton&lt;ITokenService, TokenService&gt;();</code></pre>
+
+<p>
+The <code>kid</code> is derived from the key itself using the RFC&nbsp;7638 JWK
+thumbprint &mdash; SHA-256 over a canonical JSON encoding of the public parameters, with
+members in a spec-mandated order and no whitespace:
+</p>
+
+<pre><code>var canonical = JsonSerializer.Serialize(new Dictionary&lt;string, string&gt;
+{
+    ["e"]   = Base64UrlEncoder.Encode(parameters.Exponent),
+    ["kty"] = "RSA",
+    ["n"]   = Base64UrlEncoder.Encode(parameters.Modulus)
+});
+
+return Base64UrlEncoder.Encode(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));</code></pre>
+
+<p>
+Deriving rather than assigning the identifier means the <code>kid</code> in a token
+header can never disagree with the <code>kid</code> published in the JWKS, because both
+are computed from the same key material.
+</p>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant S as Synapse SPA
+    participant A as Synapse API
+    participant J as JwtBearer<br/>middleware
+    participant C as Cerberus<br/>/.well-known
+
+    S->>A: GET /api/analysis<br/>Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6...
+
+    A->>J: authenticate
+
+    alt key set not yet cached
+        J->>C: GET /.well-known/openid-configuration
+        C-->>J: { issuer, jwks_uri, ... }
+        J->>C: GET /.well-known/jwks.json
+        C-->>J: { keys: [ { kty, kid, n, e } ] }
+        Note over J: cache keys
+    end
+
+    Note over J: read kid from token header<br/>select matching key<br/>verify RS256 signature<br/>iss == Authority<br/>aud == Audience<br/>exp not passed
+
+    alt valid
+        J-->>A: ClaimsPrincipal (sub, email, ...)
+        A-->>S: 200
+    else invalid
+        J-->>S: 401 + WWW-Authenticate:<br/>error_description="..."
+    end
+</pre>
+<div class="caption">Figure 4 &mdash; Token validation. No shared secret and no call back to the
+client; trust flows entirely from the published key.</div>
+</div>
+
+<div class="callout ok">
+  <span class="label">Debugging tip</span>
+  <p>
+  When a token is rejected, the reason is in the <code>WWW-Authenticate</code> response
+  header, not the body. <code>curl -D - …</code> and read it &mdash; it states plainly
+  whether the failure was audience, issuer, signature or lifetime.
+  </p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>7. Browser-side authentication in the React client</h2>
+
+<p>
+Authentication in the Synapse client is split into small single-purpose modules under
+<code>src/features/auth/</code>, rather than one context object that does everything.
+</p>
+
+<table>
+  <tr><th>Module</th><th>Responsibility</th></tr>
+  <tr><td><code>pkce.ts</code></td><td>Verifier, challenge and state generation.</td></tr>
+  <tr><td><code>tokenStorage.ts</code></td><td>Persistence, JWT decoding, expiry checks.</td></tr>
+  <tr><td><code>oauth.ts</code></td><td>The protocol: authorize redirect, code exchange.</td></tr>
+  <tr><td><code>AuthProvider.tsx</code></td><td>React state, session restore, expiry timer.</td></tr>
+  <tr><td><code>RequireAuth.tsx</code></td><td>Route guard.</td></tr>
+  <tr><td><code>sessionEvents.ts</code></td><td>Decouples the axios interceptor from React.</td></tr>
+</table>
+
+<h3>Entropy and the state parameter</h3>
+
+<p>
+The verifier is drawn from <code>crypto.getRandomValues</code>. This is worth calling out
+because the Angular application's own <code>PkceService</code> uses
+<code>Math.random()</code>, which is not a cryptographic generator &mdash; its output is
+predictable from observed values, and a predictable verifier defeats PKCE entirely.
+</p>
+
+<p>
+<code>state</code> is a separate random value serving a different purpose: CSRF
+protection on the callback. Without it, an attacker can feed a victim a callback URL
+carrying the attacker's own authorization code, causing the victim's session to be
+silently bound to the attacker's account. The client rejects any callback whose state
+does not match:
+</p>
+
+<pre><code>if (!expectedState || returnedState !== expectedState) {
+  loginAttemptStorage.clear()
+  throw new OAuthError(
+    'The sign-in response could not be verified.',
+    'The state parameter did not match the one sent with the request. …')
+}</code></pre>
+
+<h3>Where the tokens live</h3>
+
+<p>
+Access and refresh tokens go in <code>localStorage</code>; the PKCE verifier and state go
+in <code>sessionStorage</code>. That split is deliberate:
+</p>
+
+<ul>
+  <li>Tokens must survive a page reload, or every refresh would bounce the user to the
+  login screen.</li>
+  <li>The verifier and state are single-use, scoped to one login attempt, and must not
+  outlive the tab. They are cleared in a <code>finally</code> block so a failed exchange
+  cannot leave a reusable verifier behind.</li>
+</ul>
+
+<div class="callout warn">
+  <span class="label">Accepted trade-off</span>
+  <p>
+  <code>localStorage</code> is readable by any script on the origin, so a successful XSS
+  can exfiltrate the token. The mitigations that matter are keeping the token short-lived
+  &mdash; Cerberus issues 15-minute tokens &mdash; and not introducing XSS, rather than
+  attempting to hide the value from same-origin script, which is not achievable. The
+  alternative is an <code>HttpOnly</code> cookie issued by a backend-for-frontend, which
+  moves the code exchange server-side and is the stronger pattern if this ever leaves
+  local development.
+  </p>
+</div>
+
+<h3>Session lifecycle</h3>
+
+<div class="diagram diagram-wide">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> Restoring: app mounts
+
+    Restoring --> Anonymous: no token, or expired/undecodable
+    Restoring --> Authenticated: valid token in localStorage
+
+    Anonymous --> Redirecting: user clicks sign in
+    Redirecting --> Exchanging: provider returns to /auth/callback
+    Exchanging --> Authenticated: state matches, code exchanged
+    Exchanging --> Failed: state mismatch, no code,<br/>or provider error
+
+    Failed --> Anonymous: "Back to sign-in"
+
+    Authenticated --> Anonymous: user signs out
+    Authenticated --> Anonymous: exp timer fires
+    Authenticated --> Anonymous: API returns 401
+
+    note right of Restoring
+        Synchronous, so the session is known
+        on the first render. Doing this in an
+        effect would flash one signed-out
+        frame and bounce the user.
+    end note
+
+    note right of Authenticated
+        A timer is armed for the exact
+        moment of expiry, so the session
+        ends in place rather than at the
+        next failed request.
+    end note
+</pre>
+<div class="caption">Figure 5 &mdash; Session state. Three independent paths lead back to
+Anonymous: explicit sign-out, local expiry, and server rejection.</div>
+</div>
+
+<h4>Restoration must be synchronous</h4>
+
+<pre><code>const [session, setSession] = useState&lt;SessionState&gt;(restoreSession)</code></pre>
+
+<p>
+Reading <code>localStorage</code> is synchronous, so the session is known on the very
+first render. Doing it in a <code>useEffect</code> instead would render one frame as
+signed-out &mdash; long enough for <code>RequireAuth</code> to redirect an
+already-authenticated user to the login page on every reload. React&nbsp;19's
+<code>react-hooks/set-state-in-effect</code> lint rule flags exactly this pattern.
+</p>
+
+<h4>Expiring in place</h4>
+
+<pre><code>const msRemaining = Math.max(claims.exp * 1000 - Date.now(), 0)
+const timer = window.setTimeout(logout, msRemaining)
+return () =&gt; window.clearTimeout(timer)</code></pre>
+
+<p>
+The clamp to zero matters: an already-expired token schedules an immediate timeout rather
+than calling <code>logout()</code> synchronously inside the effect, which would cascade
+an extra render.
+</p>
+
+<h4>Server-driven expiry</h4>
+
+<p>
+The axios response interceptor cannot import React state, and it is constructed before
+the component tree exists. A tiny event emitter bridges the gap:
+</p>
+
+<pre><code>if (error.response?.status === 401) {
+  tokenStorage.clear()
+  emitSessionExpired()   // AuthProvider subscribes and calls logout()
+}</code></pre>
+
+<p>
+Only <code>401</code> clears the session. <code>403</code> deliberately does not &mdash;
+that means authenticated but not permitted, and signing the user out in response would be
+both wrong and confusing. The previous implementation checked for
+<code>status === 101</code>, which is the <em>Switching Protocols</em> informational
+code and can never appear here, so expired sessions were never handled at all.
+</p>
+
+<h4>Single-use codes and StrictMode</h4>
+
+<p>
+The callback page guards the exchange with a ref:
+</p>
+
+<pre><code>const hasStarted = useRef(false)
+if (hasStarted.current) return
+hasStarted.current = true</code></pre>
+
+<p>
+React StrictMode double-invokes effects in development. Without this guard the second
+invocation would attempt to redeem an authorization code the server has already consumed
+and deleted, producing a spurious <em>"Invalid or expired code"</em> failure on every
+development sign-in.
+</p>
+
+<div class="page-break"></div>
+
+<h2>8. The Angular application as authorization UI</h2>
+
+<p>
+The Cerberus web application was written as a standalone login for itself: authenticate,
+store a token, navigate to the user menu. Acting as the authorization step of
+<em>another</em> application's OAuth flow is a different role, and it had none of the
+required wiring.
+</p>
+
+<table>
+  <tr><th>Gap</th><th>Consequence</th></tr>
+  <tr>
+    <td>Never read <code>requestId</code> from the query string.</td>
+    <td>The OAuth context was lost the moment the page loaded.</td>
+  </tr>
+  <tr>
+    <td>Never sent it with the login request.</td>
+    <td>The server took the non-OAuth branch and issued a session token instead of an authorization code.</td>
+  </tr>
+  <tr>
+    <td>Only handled <code>res.token</code> and <code>res.challengeId</code>.</td>
+    <td>On an OAuth login <code>token</code> is <code>null</code> by design, so the page silently did nothing. This was the visible symptom: a login that appeared to succeed and went nowhere.</td>
+  </tr>
+</table>
+
+<p>The corrected response handling checks the OAuth outcome first:</p>
+
+<pre><code>if (!!res.redirectUrl) {
+    // A full page navigation, not router.navigate: the target is a
+    // different origin and Angular's router cannot leave the app.
+    window.location.href = res.redirectUrl;
+    return;
+}</code></pre>
+
+<p>
+The same fix was applied to the MFA component, which had the identical defect one step
+later in the flow.
+</p>
+
+<p>Two smaller corrections were made while in these files:</p>
+
+<ul>
+  <li>The challenge was written to <code>localStorage</code> as
+  <code>'Challange-Token'</code> but read by <code>challenge.guard.ts</code> as
+  <code>'Challenge-Token'</code>. Latent only because the guard is currently stubbed to
+  <code>return true</code>; it would have failed the moment the guard was enabled.</li>
+  <li><code>loginUser</code> sent <code>Authorization: Bearer null</code> on an anonymous
+  endpoint, because it reused the authenticated-header helper before any token
+  exists.</li>
+</ul>
+
+<h2>9. Cross-origin resource sharing</h2>
+
+<p>
+Three separate origins make browser requests in this system, so CORS is not incidental
+&mdash; it is load-bearing in three different places, each with different mechanics.
+</p>
+
+<h3>9.1 Why the browser is involved at all</h3>
+
+<p>
+The same-origin policy blocks a page on <code>localhost:5173</code> from reading a
+response from <code>localhost:5211</code>. Ports differ, so the origins differ. CORS is
+the server's mechanism for opting in.
+</p>
+
+<p>
+The distinction that matters most for debugging: for a <em>simple</em> request the
+browser sends it and then withholds the response if the headers do not permit access
+&mdash; the server has already executed it. For anything else the browser first sends a
+<strong>preflight</strong> <code>OPTIONS</code> and refuses to send the real request
+unless the preflight approves it. A JSON <code>POST</code> is preflighted;
+a form-encoded <code>POST</code> is not.
+</p>
+
+<div class="diagram">
+<pre class="mermaid">
+%%{init: {"themeVariables": {"fontSize": "19px"}, "flowchart": {"nodeSpacing": 30, "rankSpacing": 34}}}%%
+flowchart TD
+    START["Cross-origin request"] --> SIMPLE{"Preflight required?"}
+
+    SIMPLE -->|"No &mdash; simple request"| SEND["Send the real request"]
+    SIMPLE -->|"Yes &mdash; JSON body<br/>or custom header"| PRE["OPTIONS preflight"]
+
+    PRE --> ALLOWED{"Origin in the<br/>allow-list?"}
+    ALLOWED -->|No| BLOCK1["Blocked &mdash; the real<br/>request is never sent"]
+    ALLOWED -->|Yes| SEND
+
+    SEND --> REDIR{"3xx redirect?"}
+    REDIR -->|"Yes &mdash; e.g. HTTPS upgrade"| FOLLOW["Follows to the new origin;<br/>a preflight cannot be<br/>redirected, so it fails"]
+    REDIR -->|No| CHECK{"Allow-Origin<br/>matches?"}
+
+    CHECK -->|Yes| OK["Response readable"]
+    CHECK -->|No| BLOCK2["Blocked, but the server<br/>already did the work"]
+
+    classDef bad fill:#fef2f2,stroke:#dc2626,color:#0f172a
+    classDef good fill:#ecfdf5,stroke:#059669,color:#0f172a
+    classDef neutral fill:#f1f5f9,stroke:#64748b,color:#0f172a
+    class BLOCK1,BLOCK2,FOLLOW bad
+    class OK,P204 good
+    class START,SIMPLE,PRE,SEND,REDIR,CHECK,ALLOWED neutral
+</pre>
+<div class="caption">Figure 6 &mdash; Preflight decision path, and the redirect interaction that
+broke the integration.</div>
+</div>
+
+<h3>9.2 Cerberus &mdash; from one hard-coded origin to configuration</h3>
+
+<p>The policy allowed exactly one origin, written into the source:</p>
+
+<pre><code>// before
+corsPolicyBuilder.WithOrigins("http://localhost:4200")</code></pre>
+
+<p>
+The Angular app was the only client when that was written. The Synapse client calls
+<code>/OAuth/token</code> directly from <code>localhost:5173</code>, so it was blocked
+outright. Origins now come from configuration:
+</p>
+
+<pre><code>var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get&lt;string[]&gt;() ?? ["http://localhost:4200"];
+
+options.AddPolicy(allowSpecificOrigin, corsPolicyBuilder =&gt;
+{
+    corsPolicyBuilder
+        .WithOrigins(allowedOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials();
+});</code></pre>
+
+<pre><code>"Cors": {
+  "AllowedOrigins": [ "http://localhost:4200", "http://localhost:5173" ]
+}</code></pre>
+
+<div class="callout">
+  <span class="label">Why not AllowAnyOrigin</span>
+  <p>
+  <code>AllowCredentials()</code> and <code>AllowAnyOrigin()</code> are mutually
+  exclusive by specification &mdash; the browser rejects a wildcard
+  <code>Access-Control-Allow-Origin</code> on a credentialed request, and ASP.NET Core
+  throws at startup if both are configured. An explicit allow-list is required regardless,
+  and is the correct posture for an authorization server: it bounds which applications can
+  invoke the token endpoint from a browser.
+  </p>
+</div>
+
+<h3>9.3 The HTTPS redirect interaction <span class="tag tag-new">KEY FINDING</span></h3>
+
+<p>
+Cerberus calls <code>app.UseHttpsRedirection()</code>. Run under its <code>https</code>
+launch profile it binds both 7077 and 5211, and then upgrades every plain-HTTP request
+with a 307. Observed directly during integration:
+</p>
+
+<pre><code>STEP 1  GET http://localhost:5211/OAuth/authorize
+        -&gt; 302 https://localhost:7077/OAuth/authorize?...   (not the login page)
+
+STEP 4  POST http://localhost:5211/OAuth/token
+        -&gt; HTTP 307</code></pre>
+
+<p>This breaks a browser client in two compounding ways:</p>
+
+<ol>
+  <li>The upgraded target uses the ASP.NET development certificate, which the browser
+  does not trust by default. The request fails at the TLS layer.</li>
+  <li>Where a preflight is involved, redirects are not permitted on the preflight itself,
+  so the request is rejected before the real call is ever attempted.</li>
+</ol>
+
+<p>
+Note also the middleware ordering: <code>UseCors</code> sits <em>before</em>
+<code>UseHttpsRedirection</code>, so a preflight is short-circuited with a valid 204 while
+the subsequent real request is still 307'd. The preflight succeeding makes the failure
+look unrelated to CORS, which is what makes it hard to diagnose.
+</p>
+
+<p>
+The resolution for local development is to run the <code>http</code> profile only. With
+no HTTPS port bound there is nothing to redirect to, and the entire flow stays on one
+scheme. Every participant was aligned on <code>http://localhost:5211</code>, including
+the Angular application's <code>environment.apiUrl</code>, which had been pointing at
+<code>https://localhost:7077</code>.
+</p>
+
+<h3>9.4 Synapse API</h3>
+
+<p>
+The API uses a default policy naming the SPA origin, with the middleware ordered
+<code>UseCors</code> → <code>UseAuthentication</code> → <code>UseAuthorization</code>.
+That order is required: a preflight carries no <code>Authorization</code> header, so if
+authentication ran first every preflight would be rejected with a 401 and no cross-origin
+call would ever succeed.
+</p>
+
+<pre><code>"Cors": { "AllowedOrigins": [ "http://localhost:5173" ] }</code></pre>
+
+<p>
+This is also why the Vite dev server is pinned with <code>strictPort: true</code>. Vite's
+default is to move to 5174 if 5173 is occupied; that silent port change would produce
+CORS failures and a rejected OAuth redirect, both far harder to diagnose than a
+start-up error.
+</p>
+
+<h3>9.5 MinIO &mdash; a different mechanism entirely</h3>
+
+<p>
+The third origin is object storage. Because captures are uploaded from the browser
+straight to MinIO, MinIO must permit the SPA's origin. Two things make this unlike the
+other two cases:
+</p>
+
+<ul>
+  <li>MinIO does not implement the S3 <code>PutBucketCors</code> API, so this cannot be
+  configured through the SDK. It reads an environment variable:
+  <code>MINIO_API_CORS_ALLOW_ORIGIN</code>.</li>
+  <li>It is not enough for the request to succeed &mdash; the <code>ETag</code> response
+  header must be <em>readable</em> by script. Multipart uploads are assembled from the
+  ETag of each part, so if the header is not exposed cross-origin the upload cannot be
+  completed even though every chunk transferred successfully.</li>
+</ul>
+
+<p>The upload client detects precisely this and reports it, rather than failing opaquely:</p>
+
+<pre><code>const eTag = xhr.getResponseHeader('ETag')
+
+if (!eTag) {
+  reject(new UploadError(
+    'The storage service did not return a readable ETag.',
+    'The chunk uploaded, but its ETag header is not exposed to the browser, so the '
+    + 'parts cannot be assembled. Start MinIO with MINIO_API_CORS_ALLOW_ORIGIN set '
+    + "to this app's origin."))
+}</code></pre>
+
+<div class="page-break"></div>
+
+<h2>10. Other logic worth noting</h2>
+
+<h3>10.1 Bearer tokens over Server-Sent Events</h3>
+
+<p>
+The analysis stream is delivered with SSE, and the browser's <code>EventSource</code> API
+cannot set request headers &mdash; so it cannot send <code>Authorization</code>. The API
+opts into reading the token from the query string, narrowly:
+</p>
+
+<pre><code>OnMessageReceived = context =&gt;
+{
+    if (string.IsNullOrEmpty(context.Token) &amp;&amp;
+        context.Request.Path.StartsWithSegments("/api/analysis") &amp;&amp;
+        context.Request.Query.TryGetValue("access_token", out var token))
+    {
+        context.Token = token;
+    }
+
+    return Task.CompletedTask;
+}</code></pre>
+
+<p>
+The scoping is what makes this acceptable: it applies only when no header was supplied
+and only under <code>/api/analysis</code>. It remains a real trade-off &mdash; URLs are
+logged by servers and proxies far more readily than headers &mdash; and is mitigated in
+practice by the 15-minute token lifetime.
+</p>
+
+<h3>10.2 Claims mapping</h3>
+
+<p>
+<code>MapInboundClaims</code> is disabled, so the raw OIDC <code>sub</code> claim is not
+silently rewritten to the long-form .NET <code>NameIdentifier</code> URI. The extension
+that reads the caller's identity checks both, so either convention works:
+</p>
+
+<pre><code>var value =
+    principal.FindFirstValue(JwtRegisteredClaimNames.Sub)
+    ?? principal.FindFirstValue(ClaimTypes.NameIdentifier);</code></pre>
+
+<h3>10.3 Just-in-time user provisioning</h3>
+
+<p>
+Cerberus owns the user record; the Synapse database only needs a row for its foreign
+keys. Rather than synchronising directories, the API provisions on first sight:
+</p>
+
+<pre><code>await _userRepository.EnsureAsync(userId, string.Empty, string.Empty, cancellationToken);</code></pre>
+
+<p>
+The identifier is the <code>sub</code> claim, so the two systems agree on identity without
+sharing a database.
+</p>
+
+<h3>10.4 Two storage clients, one signature</h3>
+
+<p>
+Presigned URLs are signed against a specific host &mdash; the host forms part of the
+signature. The storage adapter therefore holds two S3 clients: an internal one for the
+API's own operations and for URLs handed to the Zeek service, and a public one for URLs
+handed to the browser.
+</p>
+
+<p>
+This produced a subtle failure. <code>MinIO:Endpoint</code> was
+<code>http://localhost:9000</code>, but that URL is also given to the Zeek container,
+where <code>localhost</code> is the container itself. The download could never succeed.
+Both sides must agree on one name, so the endpoint is now
+<code>http://minio:9000</code> &mdash; resolved by Docker's internal DNS inside the
+network, and by a hosts entry on the development machine.
+</p>
+
+<h3>10.5 Error shape</h3>
+
+<p>
+The token endpoint returns the structure OAuth clients expect for a rejected grant
+(RFC&nbsp;6749 §5.2) rather than a bare string:
+</p>
+
+<pre><code>return BadRequest(new
+{
+    error = "invalid_grant",
+    error_description = result.Error
+});</code></pre>
+
+<h2>11. Security posture and remaining gaps</h2>
+
+<p>Verified as working correctly &mdash; each of these was exercised directly:</p>
+
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Wrong <code>code_verifier</code></td><td><code>400 invalid_grant</code></td></tr>
+  <tr><td>Missing <code>code_verifier</code> on a public client</td><td><code>400 invalid_grant</code></td></tr>
+  <tr><td>Mismatched <code>redirect_uri</code> at token time</td><td><code>400 invalid_grant</code></td></tr>
+  <tr><td>Replay of an already-redeemed code</td><td><code>400</code> &mdash; invalid or expired</td></tr>
+  <tr><td>Authorize without a challenge (public client)</td><td><code>400</code> &mdash; challenge required</td></tr>
+  <tr><td>Garbage or absent bearer token at the API</td><td><code>401</code></td></tr>
+</table>
+
+<p>Gaps that remain, in rough priority order:</p>
+
+<ol>
+  <li><strong>No refresh token grant.</strong> <code>/OAuth/token</code> handles only
+  <code>authorization_code</code>. A refresh token is issued but never persisted and
+  cannot be redeemed, so sessions simply end after 15 minutes. Implementing this needs a
+  storage and rotation decision, not just a code change.</li>
+  <li><strong>A failed exchange does not revoke the code.</strong> The code is deleted on
+  success and otherwise left to its 5-minute expiry. RFC&nbsp;6819 recommends revoking on
+  a failed verification attempt to remove the brute-force window.</li>
+  <li><strong>No <code>nonce</code> support and no ID token.</strong> The discovery
+  document advertises OIDC-shaped metadata, but only an OAuth access token is issued.</li>
+  <li><strong>Tokens in <code>localStorage</code>.</strong> Discussed in §7 &mdash;
+  acceptable here, worth revisiting behind a BFF for production.</li>
+  <li><strong>The Zeek service is unauthenticated and fetches arbitrary URLs.</strong> It
+  must remain on an internal network; exposing it provides a server-side request forgery
+  primitive.</li>
+  <li><strong>The Angular client's own PKCE service uses <code>Math.random()</code>.</strong>
+  Not on the Synapse path, but it undermines PKCE for the Angular application's own flow
+  and should be moved to <code>crypto.getRandomValues</code>.</li>
+</ol>
+
+<h2>12. Configuration reference</h2>
+
+<p>
+Every value below must agree across the four components. The issuer and authority in
+particular are compared as exact strings.
+</p>
+
+<table>
+  <tr><th>Setting</th><th>Location</th><th>Value</th></tr>
+  <tr><td><code>JWT:Issuer</code></td><td>Cerberus <code>appsettings.json</code></td><td><code>http://localhost:5211</code></td></tr>
+  <tr><td><code>OAuth:LoginUrl</code></td><td>Cerberus <code>appsettings.json</code></td><td><code>http://localhost:4200/login</code></td></tr>
+  <tr><td><code>Cors:AllowedOrigins</code></td><td>Cerberus <code>appsettings.json</code></td><td><code>[4200, 5173]</code></td></tr>
+  <tr><td><code>Jwt:Authority</code></td><td>Synapse API</td><td><code>http://localhost:5211</code> &mdash; must equal the issuer</td></tr>
+  <tr><td><code>Jwt:Audience</code></td><td>Synapse API</td><td><code>synapse-spa</code> &mdash; the client id</td></tr>
+  <tr><td><code>Cors:AllowedOrigins</code></td><td>Synapse API</td><td><code>http://localhost:5173</code></td></tr>
+  <tr><td><code>VITE_SSO_BASE_URL</code></td><td>Synapse client <code>.env</code></td><td><code>http://localhost:5211</code></td></tr>
+  <tr><td><code>VITE_SSO_CLIENT_ID</code></td><td>Synapse client <code>.env</code></td><td><code>synapse-spa</code></td></tr>
+  <tr><td><code>VITE_SSO_REDIRECT_URI</code></td><td>Synapse client <code>.env</code></td><td><code>http://localhost:5173/auth/callback</code> &mdash; exact match required</td></tr>
+  <tr><td><code>environment.apiUrl</code></td><td>Angular</td><td><code>http://localhost:5211</code></td></tr>
+  <tr><td><code>MINIO_API_CORS_ALLOW_ORIGIN</code></td><td>MinIO container</td><td><code>http://localhost:5173</code></td></tr>
+</table>
+
+<div class="callout ok">
+  <span class="label">Verified end to end</span>
+  <p>
+  The complete flow was exercised in a browser: sign-in from the Synapse client, redirect
+  through Cerberus to the Angular login page carrying a <code>requestId</code>,
+  credential submission, redirect back to the callback, code exchange, and an authorized
+  API call. The resulting token carried
+  <code>sub=ede06d10-…</code>, <code>preferred_username=Dana Analyst</code>,
+  <code>aud=synapse-spa</code>, <code>iss=http://localhost:5211</code>;
+  <code>GET /api/analysis</code> returned <code>200</code>, and the PKCE verifier was
+  consumed and cleared.
+  </p>
+</div>
+
+<!-- Regenerate: npm i mermaid && chrome --headless --print-to-pdf. This copy uses
+     the CDN so it also opens standalone in a browser. -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      darkMode: false,
+      // Set explicitly. Mermaid's base theme derives unset variables from the ones you
+      // do provide, and left to itself it rendered the diagram canvas near-black.
+      background: '#ffffff',
+      mainBkg: '#dbeafe',
+      nodeBorder: '#2563eb',
+      nodeTextColor: '#0f172a',
+      titleColor: '#0f172a',
+      textColor: '#0f172a',
+      edgeLabelBackground: '#ffffff',
+      clusterBkg: '#f8fafc',
+      clusterBorder: '#94a3b8',
+
+      fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+      fontSize: '13px',
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#0f172a',
+      primaryBorderColor: '#2563eb',
+      lineColor: '#475569',
+      secondaryColor: '#e0f2fe',
+      secondaryTextColor: '#0f172a',
+      secondaryBorderColor: '#0369a1',
+      tertiaryColor: '#f1f5f9',
+      tertiaryTextColor: '#0f172a',
+      tertiaryBorderColor: '#94a3b8',
+      noteBkgColor: '#fffbeb',
+      noteTextColor: '#78350f',
+      noteBorderColor: '#d97706',
+      actorBkg: '#dbeafe',
+      actorBorder: '#2563eb',
+      actorTextColor: '#0f172a',
+      actorLineColor: '#94a3b8',
+      signalColor: '#334155',
+      signalTextColor: '#1a1d23',
+      labelBoxBkgColor: '#e0f2fe',
+      labelBoxBorderColor: '#0369a1',
+      labelTextColor: '#0f172a',
+      loopTextColor: '#0f172a',
+      altBackground: '#f8fafc',
+      sequenceNumberColor: '#ffffff',
+      // state diagram
+      transitionColor: '#475569',
+      transitionLabelColor: '#0f172a',
+      stateBkg: '#dbeafe',
+      stateLabelColor: '#0f172a',
+      compositeBackground: '#f8fafc',
+      compositeTitleBackground: '#e0f2fe',
+      labelBackgroundColor: '#ffffff'
+    },
+    sequence: { useMaxWidth: true, wrap: true, width: 165, actorFontWeight: 600, noteAlign: 'left' },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+  });
+
+  window.renderComplete = false;
+  mermaid.run({ querySelector: '.mermaid' })
+    .then(() => { window.renderComplete = true; document.title = 'READY ' + document.title; })
+    .catch((e) => { window.renderError = String(e); window.renderComplete = true; });
+</script>
+
+</body>
+</html>
