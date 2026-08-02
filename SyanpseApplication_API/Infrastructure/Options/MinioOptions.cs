@@ -5,8 +5,8 @@ public class MinioOptions
     public const string SectionName = "MinIO";
 
     /// <summary>
-    /// Endpoint the API and the Zeek service use to reach MinIO, e.g. http://localhost:9000
-    /// locally or http://minio:9000 inside a compose network.
+    /// Endpoint this API uses to reach MinIO directly, e.g. http://localhost:9000 when the
+    /// API runs on the host or http://minio:9000 inside a compose network.
     /// </summary>
     public string Endpoint { get; set; } = "http://localhost:9000";
 
@@ -16,6 +16,21 @@ public class MinioOptions
     /// host afterwards would invalidate the signature. Defaults to <see cref="Endpoint"/>.
     /// </summary>
     public string? PublicEndpoint { get; set; }
+
+    /// <summary>
+    /// Endpoint the Zeek service uses to fetch a capture.
+    /// </summary>
+    /// <remarks>
+    /// MinIO has three consumers reaching it from three different network positions - this
+    /// API, the browser, and the Zeek container - and a presigned url is only valid for the
+    /// host it was signed against. Each therefore needs its own endpoint.
+    ///
+    /// The Zeek service usually runs in a container while the API runs on the host, so
+    /// `localhost` means two different machines to the two of them: a url signed for
+    /// localhost:9000 resolves to the container itself and the download fails. Defaults to
+    /// <see cref="Endpoint"/> for an all-in-one deployment where they agree.
+    /// </remarks>
+    public string? ZeekEndpoint { get; set; }
 
     public string AccessKey { get; set; } = string.Empty;
 

@@ -5,7 +5,9 @@ import { MainLayout } from '@/components/layout/MainLayout'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { AnalysisWorkspace } from '@/features/analysis/AnalysisWorkspace'
+import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { CallbackPage } from '@/pages/CallbackPage'
+import { HistoryPage } from '@/pages/HistoryPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
@@ -25,6 +27,28 @@ export default function App() {
                 <RequireAuth>
                   <MainLayout>
                     <AnalysisWorkspace />
+                  </MainLayout>
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/analyses"
+              element={
+                <RequireAuth>
+                  <MainLayout>
+                    <HistoryPage />
+                  </MainLayout>
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/analyses/:analysisId"
+              element={
+                <RequireAuth>
+                  <MainLayout>
+                    <AnalysisDetailPage />
                   </MainLayout>
                 </RequireAuth>
               }

@@ -203,14 +203,28 @@ MinIO .NET SDK keeps multipart creation internal and only presigns whole objects
 uses `AWSSDK.S3` against MinIO's S3-compatible endpoint. This is a client-library choice only —
 MinIO itself is unchanged, and runs from the stock image.
 
-Two S3 clients are registered, because SigV4 binds the signature to the hostname:
+Three S3 clients are registered, because SigV4 binds the signature to the hostname and MinIO
+has three consumers sitting in three different network positions:
 
-- **internal** (`MinIO:Endpoint`) — API-side calls, and the presigned GET the Zeek service uses
+- **internal** (`MinIO:Endpoint`) — API-side calls
 - **public** (`MinIO:PublicEndpoint`) — the presigned PUTs the browser calls
+- **zeek** (`MinIO:ZeekEndpoint`) — the presigned GET handed to the Zeek service
 
-On a single host both are `http://localhost:9000`. Under compose they differ
-(`http://minio:9000` vs `http://localhost:9000`), which is why rewriting the host after signing
-is not an option.
+The third exists because the Zeek service normally runs in a container while the API runs on
+the host, so `localhost` means two different machines to the two of them: a url signed for
+`localhost:9000` resolves to the container itself and the download fails. The defaults are
+
+| | Value | Reached from |
+|---|---|---|
+| `Endpoint` | `http://localhost:9000` | the API process on the host |
+| `PublicEndpoint` | `http://localhost:9000` | the browser |
+| `ZeekEndpoint` | `http://host.docker.internal:9000` | inside the Zeek container |
+
+Under the all-in-Docker `api` profile all three collapse to `http://minio:9000`, since
+everything shares the compose network.
+
+Rewriting the host after signing is never an option — that is precisely what the signature
+prevents — so each consumer must be given a url signed for the address it can actually reach.
 
 ## Swagger
 
@@ -306,7 +320,7 @@ orchestration.
 | Key | Purpose |
 |---|---|
 | `ConnectionStrings:Postgres` | Metadata database |
-| `MinIO:Endpoint` / `PublicEndpoint` | Internal and browser-facing storage addresses |
+| `MinIO:Endpoint` / `PublicEndpoint` / `ZeekEndpoint` | Storage address as seen by the API, the browser, and the Zeek container |
 | `MinIO:PartSizeBytes` | Chunk size; minimum 5 MiB, default 64 MiB |
 | `Zeek:BaseAddress` / `Timeout` | Zeek service address and per-capture ceiling |
 | `Ollama:BaseAddress` / `Model` / `ContextLength` | Generation settings |

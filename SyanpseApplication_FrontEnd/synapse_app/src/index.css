@@ -85,8 +85,7 @@ body {
 
 h1,
 h2,
-h3,
-.display-font {
+h3 {
   font-family: var(--font-display);
   font-variation-settings: 'ROND' 100;
   letter-spacing: 0.01em;
@@ -545,6 +544,120 @@ h3,
   text-align: center;
 }
 
+/* ---- Navigation ----------------------------------------------------------- */
+
+.app-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--app-muted);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.app-nav-link:hover {
+  background-color: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+/* react-router sets .active on the matching NavLink. */
+.app-nav-link.active {
+  background-color: var(--app-accent-soft);
+  color: var(--app-accent);
+  font-weight: 600;
+}
+
+/* ---- Standalone pages ------------------------------------------------------ */
+
+/* History and detail scroll as ordinary documents, unlike the workspace, which pins
+   its composer to the bottom and scrolls only the transcript. */
+.page-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.page-column {
+  width: 100%;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.back-link {
+  color: var(--app-muted);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--app-accent);
+}
+
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-muted);
+}
+
+/* ---- History table --------------------------------------------------------- */
+
+.history-table {
+  font-size: 0.9rem;
+}
+
+.history-table thead th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-muted);
+  border-bottom: 1px solid var(--app-border);
+  white-space: nowrap;
+}
+
+.history-table td {
+  border-bottom: 1px solid var(--app-border);
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.history-link {
+  color: var(--app-text);
+  text-decoration: none;
+  font-weight: 500;
+  /* Without a bound the file-name cell refuses to shrink and the table overflows
+     rather than the name truncating. */
+  max-width: 22rem;
+}
+
+.history-link:hover {
+  color: var(--app-accent);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-spinner {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-width: 0.13em;
+}
+
 /* ---- Motion --------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -552,7 +665,8 @@ h3,
     animation: none;
   }
 
-  .dropzone {
+  .dropzone,
+  .app-nav-link {
     transition: none;
   }
 }

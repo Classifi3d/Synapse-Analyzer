@@ -121,3 +121,6 @@ UpgradeLog*.htm
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# JetBrains IDE settings
+.idea/

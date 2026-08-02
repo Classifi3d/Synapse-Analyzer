@@ -103,6 +103,20 @@ public static class InfrastructureExtension
             return CreateClient(options, endpoint);
         });
 
+        // Client used to sign the capture download url handed to the Zeek service. It
+        // usually sits in a container while this API is on the host, so it reaches MinIO by
+        // a different name than either the API or the browser does.
+        services.AddKeyedSingleton<IAmazonS3>(S3ClientKeys.Zeek, (sp, _) =>
+        {
+            var options = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
+
+            var endpoint = string.IsNullOrWhiteSpace(options.ZeekEndpoint)
+                ? options.Endpoint
+                : options.ZeekEndpoint;
+
+            return CreateClient(options, endpoint);
+        });
+
         // Fail-fast client for health probes only.
         services.AddKeyedSingleton<IAmazonS3>(S3ClientKeys.Probe, (sp, _) =>
         {

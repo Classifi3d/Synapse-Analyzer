@@ -85,6 +85,7 @@ public class ThreatAnalysisService : IThreatAnalysisService
             objectKey,
             contentType,
             partCount,
+            _options.UploadUrlLifetime,
             cancellationToken);
 
         var analysis = new Analysis
@@ -162,8 +163,15 @@ public class ThreatAnalysisService : IThreatAnalysisService
         {
             _logger.LogError(ex, "Failed to complete upload for analysis {AnalysisId}.", analysis.Id);
 
+            // Release the parts already in storage. S3 keeps the fragments of an
+            // incomplete multipart upload indefinitely and they are invisible to a
+            // normal object listing, so skipping this leaks storage that nothing
+            // will ever reclaim.
+            await AbortUploadQuietlyAsync(analysis, cancellationToken);
+
             analysis.Status = AnalysisStatus.Failed;
             analysis.ErrorMessage = $"Upload could not be completed: {ex.Message}";
+            analysis.UploadId = null;
             await _analysisRepository.UpdateAsync(analysis, cancellationToken);
 
             throw new AnalysisPipelineException("Failed to complete the multipart upload.", ex);
@@ -233,6 +241,25 @@ public class ThreatAnalysisService : IThreatAnalysisService
                 "The capture has not finished uploading yet.");
         }
 
+        // The stages below persist Analyzing and Reporting as they go. Those are
+        // statements about work in progress, and the work stops the moment the client
+        // disconnects - so the status has to be put back, or a browser tab closing
+        // leaves the record claiming forever that a report is being written.
+        //
+        // Derived rather than simply captured: an analysis found *already* in a
+        // transient status is the residue of an earlier interrupted run, and resting
+        // there again would preserve the very state this exists to undo. Anything else
+        // is a genuine resting state and is kept as-is, so re-running a completed
+        // analysis and then cancelling leaves it completed.
+        var restingStatus = analysis.Status switch
+        {
+            AnalysisStatus.Analyzing or AnalysisStatus.Reporting =>
+                string.IsNullOrWhiteSpace(analysis.Report)
+                    ? AnalysisStatus.Uploaded
+                    : AnalysisStatus.Completed,
+            var settled => settled,
+        };
+
         // ---- Stage 1: Zeek -------------------------------------------------
         // Cached so re-running the report against a different prompt does not re-process
         // the capture.
@@ -254,6 +281,7 @@ public class ThreatAnalysisService : IThreatAnalysisService
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                await RestoreStatusAsync(analysis, restingStatus);
                 yield break;
             }
             catch (Exception ex)
@@ -316,6 +344,7 @@ public class ThreatAnalysisService : IThreatAnalysisService
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
+                    await RestoreStatusAsync(analysis, restingStatus);
                     yield break;
                 }
                 catch (Exception ex)
@@ -403,6 +432,82 @@ public class ThreatAnalysisService : IThreatAnalysisService
                 analysis.Id);
 
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Puts the status back to what it was before streaming began, after the client
+    /// went away mid-pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Restoring the entry status rather than picking a fixed one keeps the record
+    /// honest in both directions: a first run returns to Uploaded and is ready to be
+    /// tried again, while re-running an already-Completed analysis returns to
+    /// Completed and its existing report stays valid.
+    ///
+    /// Written with <see cref="CancellationToken.None"/> on purpose - the request's
+    /// token is already cancelled, and passing it here would abort the very write that
+    /// undoes the transient state.
+    /// </remarks>
+    private async Task RestoreStatusAsync(Analysis analysis, AnalysisStatus statusOnEntry)
+    {
+        _logger.LogInformation(
+            "Client disconnected from analysis {AnalysisId}; restoring status to {Status}.",
+            analysis.Id,
+            statusOnEntry);
+
+        analysis.Status = statusOnEntry;
+
+        try
+        {
+            await _analysisRepository.UpdateAsync(analysis, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // Nothing is left to report this to - the response is already gone - so log
+            // loudly rather than throwing into a disconnected request.
+            _logger.LogError(
+                ex,
+                "Could not restore the status of analysis {AnalysisId}; it may be left " +
+                "showing work that is no longer running.",
+                analysis.Id);
+        }
+    }
+
+    /// <summary>
+    /// Aborts the open multipart upload, swallowing any failure.
+    /// </summary>
+    /// <remarks>
+    /// Called only from paths that are already failing. The caller's error is the one
+    /// worth reporting, so a failure to clean up is logged and dropped rather than
+    /// replacing it - the alternative is a storage housekeeping problem masking the
+    /// reason the upload actually broke.
+    /// </remarks>
+    private async Task AbortUploadQuietlyAsync(
+        Analysis analysis,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(analysis.UploadId))
+            return;
+
+        try
+        {
+            await _storage.AbortMultipartUploadAsync(
+                analysis.ObjectKey,
+                analysis.UploadId,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Aborted the multipart upload for analysis {AnalysisId}.",
+                analysis.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not abort the multipart upload for analysis {AnalysisId}; its parts " +
+                "will remain in storage until a lifecycle rule removes them.",
+                analysis.Id);
         }
     }
 

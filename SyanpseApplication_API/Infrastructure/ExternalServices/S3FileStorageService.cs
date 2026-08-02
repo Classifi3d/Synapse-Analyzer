@@ -10,26 +10,31 @@ using Microsoft.Extensions.Options;
 namespace Infrastructure.ExternalServices;
 
 /// <summary>
-/// MinIO adapter. Two clients are used deliberately: presigned urls are signed against a
-/// specific host, so upload urls must be signed for the address the browser can reach while
-/// internal operations use the address the API can reach. In a single-host setup both point
-/// at the same endpoint.
+/// MinIO adapter.
+///
+/// Three clients are used deliberately, because a presigned url is only valid for the host
+/// it was signed against and MinIO has three consumers in three network positions: this API,
+/// the browser, and the Zeek service. Each gets urls signed for the address it can actually
+/// reach. Where all three agree - an all-in-one deployment - they collapse to one endpoint.
 /// </summary>
 public class S3FileStorageService : IFileStorageService
 {
     private readonly IAmazonS3 _internalClient;
     private readonly IAmazonS3 _publicClient;
+    private readonly IAmazonS3 _zeekClient;
     private readonly MinioOptions _options;
     private readonly ILogger<S3FileStorageService> _logger;
 
     public S3FileStorageService(
         IAmazonS3 internalClient,
         [FromKeyedServices(S3ClientKeys.Public)] IAmazonS3 publicClient,
+        [FromKeyedServices(S3ClientKeys.Zeek)] IAmazonS3 zeekClient,
         IOptions<MinioOptions> options,
         ILogger<S3FileStorageService> logger)
     {
         _internalClient = internalClient;
         _publicClient = publicClient;
+        _zeekClient = zeekClient;
         _options = options.Value;
         _logger = logger;
     }
@@ -42,6 +47,7 @@ public class S3FileStorageService : IFileStorageService
         string objectKey,
         string contentType,
         int partCount,
+        TimeSpan urlLifetime,
         CancellationToken cancellationToken = default)
     {
         var initiateResponse = await _internalClient.InitiateMultipartUploadAsync(
@@ -53,7 +59,7 @@ public class S3FileStorageService : IFileStorageService
             },
             cancellationToken);
 
-        var expiresAt = DateTime.UtcNow.AddHours(6);
+        var expiresAt = DateTime.UtcNow.Add(urlLifetime);
         var parts = new List<PresignedPart>(partCount);
 
         for (var partNumber = 1; partNumber <= partCount; partNumber++)
@@ -151,15 +157,16 @@ public class S3FileStorageService : IFileStorageService
     }
 
     /// <summary>
-    /// Signed against the internal endpoint: this url is consumed by the Zeek service, which
-    /// sits on the same network as the API, not by the browser.
+    /// Signed against the Zeek-facing endpoint, because that service is the only consumer of
+    /// this url. Signing it for the API's own endpoint would produce a url the Zeek container
+    /// cannot resolve whenever the two are not on the same network.
     /// </summary>
     public Task<string> CreatePresignedDownloadUrlAsync(
         string objectKey,
         TimeSpan lifetime,
         CancellationToken cancellationToken = default)
     {
-        return _internalClient.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        return _zeekClient.GetPreSignedURLAsync(new GetPreSignedUrlRequest
         {
             BucketName = _options.BucketName,
             Key = objectKey,

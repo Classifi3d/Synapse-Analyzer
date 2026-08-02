@@ -17,10 +17,19 @@ public interface IFileStorageService
     /// </summary>
     long PartSizeBytes { get; }
 
+    /// <summary>
+    /// Opens a multipart session and presigns one PUT per part.
+    /// </summary>
+    /// <param name="urlLifetime">
+    /// How long the presigned part urls stay valid. Passed in rather than read from
+    /// storage configuration because it is an analysis-policy decision, and it must
+    /// comfortably exceed how long a large capture takes to upload.
+    /// </param>
     Task<MultipartUploadSession> InitiateMultipartUploadAsync(
         string objectKey,
         string contentType,
         int partCount,
+        TimeSpan urlLifetime,
         CancellationToken cancellationToken = default);
 
     /// <summary>Assembles the uploaded parts into a single object and returns its final size in bytes.</summary>

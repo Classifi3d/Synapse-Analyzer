@@ -71,6 +71,10 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=synapse;Username=synapse;Password=synapse"
       MinIO__Endpoint: "http://minio:9000"
+      # In-compose, the API and the Zeek service share a network and reach MinIO by the
+      # same name, so this collapses onto Endpoint. It only differs when the API runs on
+      # the host - see MinioOptions.ZeekEndpoint.
+      MinIO__ZeekEndpoint: "http://minio:9000"
       # Signed for the host the browser can reach, not the compose-internal name.
       MinIO__PublicEndpoint: "http://localhost:9000"
       Zeek__BaseAddress: "http://zeek:8000"
